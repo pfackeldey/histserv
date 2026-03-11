@@ -21,11 +21,12 @@ python example/client.py
 # Remote hist initialized: RemoteHist<ID=765396215d2a4cef8c232b8085ea369f @[::]:50051>
 # Histogram remote_hist received: success: true
 #
-# Snapshotting current hist Hist(
+# Snapshotting current hist: Hist(
 #   Regular(10, -2, 2, name='x', label='X Axis'),
 #   Regular(10, -2, 2, name='y', label='Y Axis'),
 #   StrCategory(['data', 'drell-yan'], growth=True, name='dataset', label='Dataset'),
 #   storage=Weight()) # Sum: WeightedSum(value=911611, variance=911611) (WeightedSum(value=1e+06, variance=1e+06) with flow)
+#
 # Histogram remote_hist received: success: true
 #
 # Histogram remote_hist received: success: true

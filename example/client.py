@@ -34,7 +34,13 @@ if __name__ == "__main__":
         )
         print(f"Histogram remote_hist received: {response}")
 
-        print("Snapshotting current hist", remote_hist.snapshot(drop_from_server=False))
+        # Creating a snapshot means to return the current state of the remote_hist to the client
+        # The `drop_from_server` option allows to remove the histogram from the server's memory if set to True
+        print(
+            "Snapshotting current hist:",
+            remote_hist.snapshot(drop_from_server=False),
+            "\n",
+        )
 
         # fill histogram remotely again with different dataset
         response = remote_hist.fill(
