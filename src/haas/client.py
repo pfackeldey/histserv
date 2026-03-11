@@ -82,10 +82,10 @@ class RemoteHist:
     def __repr__(self) -> str:
         return f"RemoteHist<ID={self.hist_id} @{self.client.address}>"
 
-    def fill(self, **kwargs: tp.Any) -> grpc.Future[hist_pb2.FillResponse]:
+    def fill(self, **kwargs: tp.Any) -> hist_pb2.FillResponse:
         serialized_kwargs = {key: serialize(value) for key, value in kwargs.items()}
         request = hist_pb2.FillRequest(hist_id=self.hist_id, kwargs=serialized_kwargs)
-        return self.client.stub.Fill.future(request)
+        return self.client.stub.Fill(request)
 
     def snapshot(self, drop_from_server: bool = False) -> Hist:
         request = hist_pb2.SnapShotRequest(
@@ -102,8 +102,6 @@ class RemoteHist:
         hist_json["storage"].update(content)
         return Hist(hist_json)
 
-    def flush(
-        self, destination: str = "hist.coffea"
-    ) -> grpc.Future[hist_pb2.FlushResponse]:
+    def flush(self, destination: str = "hist.h5") -> hist_pb2.FlushResponse:
         request = hist_pb2.FlushRequest(hist_id=self.hist_id, destination=destination)
-        return self.client.stub.Flush.future(request)
+        return self.client.stub.Flush(request)

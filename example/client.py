@@ -32,11 +32,9 @@ if __name__ == "__main__":
             dataset="data",
             weight=np.ones(1_000_000, dtype=np.float64),
         )
-        print(f"Histogram remote_hist received: {response_future.result()}")
+        print(f"Histogram remote_hist received: {response_future}")
 
-        print(
-            "Snapshotting current hist", remote_hist.snapshot(drop_from_server=False)
-        )
+        print("Snapshotting current hist", remote_hist.snapshot(drop_from_server=False))
 
         # fill histogram remotely again with different dataset
         response_future = remote_hist.fill(
@@ -45,7 +43,7 @@ if __name__ == "__main__":
             dataset="drell-yan",
             weight=np.ones(1_000_000, dtype=np.float64),
         )
-        print(f"Histogram remote_hist received: {response_future.result()}")
+        print(f"Histogram remote_hist received: {response_future}")
 
         # fill histogram remotely again with different dataset (something that triggers axis growth)
         response_future = remote_hist.fill(
@@ -54,8 +52,8 @@ if __name__ == "__main__":
             dataset="ttbar",
             weight=np.ones(1_000_000, dtype=np.float64),
         )
-        print(f"Histogram remote_hist received: {response_future.result()}")
+        print(f"Histogram remote_hist received: {response_future}")
 
         # flush histogram remotely to file
         response_future = remote_hist.flush(destination="hist.h5")
-        print(f"Histogram remote_hist received: {response_future.result().message}")
+        print(f"Histogram remote_hist received: {response_future.message}")

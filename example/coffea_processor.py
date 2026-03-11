@@ -23,21 +23,15 @@ class Processor:
         # simple example fill
         import numpy as np
 
-        futures = []
         for _ in range(4):
-            future = self.remote_hist.fill(
+            ret = self.remote_hist.fill(
                 x=np.random.normal(size=1_000_000).astype(np.float64),
                 y=np.random.normal(size=1_000_000).astype(np.float64),
                 dataset="data",
                 weight=np.ones(1_000_000, dtype=np.float64),
             )
-            futures.append(future)
-
-        # ensure that all of the remote hist fill calls succeeded
-        if not all(f.result().success for f in futures):
-            print(
-                "Got some failures in remote hist filling:", [f.status for f in futures]
-            )
+            if not ret.success:
+                raise ValueError(ret.message)
 
         print("All remote fills succeeded!")
 

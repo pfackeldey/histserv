@@ -140,6 +140,9 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
             with h5py.File(destination, "w") as h5_file:
                 uhi.io.hdf5.write(h5_file.create_group("histogram"), H)
 
+            # flushing means we evict it from the server's memory
+            self.hists.pop(H_id, None)
+
             logger.info(f"Flushed histogram to {destination}")
             return hist_pb2.FlushResponse(
                 success=True,
