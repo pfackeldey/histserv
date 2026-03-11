@@ -11,42 +11,46 @@ See `example/`.
 
 Start gRPC server (or just `./example/start_server.sh`):
 ```shell
-haas-server --port 50051 --n-threads 4 --hist-ir "$(cat example/hist_ir.json)"
-# INFO:haas-server:Histogram setup successfully: Hist(
-#   Regular(10, -2, 2, name='x', label='X Axis'),
-#   Regular(10, -2, 2, name='y', label='Y Axis'),
-#   StrCategory(['data', 'drell-yan'], overflow=False, name='dataset', label='Dataset'),
-#   storage=Weight()) # Sum: WeightedSum(value=0, variance=0)
-# INFO:haas-server:Histogram server started, listening on [::]:50051 with n_threads=4
+haas-server --port 50051 --n-threads 4
+# INFO:haas-server:Histogram server started, listening on [::]:50051 with 4 threads
 ```
 
 Run example client:
 ```shell
 python example/client.py
-# Histogram remote_hist received: Histogram filled {'y': array([ 0.88330122, -0.13018699,  0.30395399, ...,  0.05815926,
-#         0.0319339 ,  0.6173756 ], shape=(1000000,)), 'x': array([-0.39557326, -1.10047103, -0.25452045, ..., -0.91580713,
-#         0.85419406,  0.14931346], shape=(1000000,)), 'weight': array([1., 1., 1., ..., 1., 1., 1.], shape=(1000000,)), 'dataset': # 'data'} successfully! Now is: Hist(
-#   Regular(10, -2, 2, name='x', label='X Axis'),
-#   Regular(10, -2, 2, name='y', label='Y Axis'),
-#   StrCategory(['data', 'drell-yan'], overflow=False, name='dataset', label='Dataset'),
-#   storage=Weight()) # Sum: WeightedSum(value=911141, variance=911141) (WeightedSum(value=1e+06, variance=1e+06) with flow)
-
-# Histogram remote_hist received: Histogram filled {'y': array([-0.7015261 , -2.24620403, -1.44075752, ..., -1.01488795,
-#         1.04233221,  1.71569615], shape=(1000000,)), 'x': array([ 0.505213  ,  0.90704077, -0.84626962, ..., -0.89036558,
-#         1.0678381 , -0.04706042], shape=(1000000,)), 'weight': array([1., 1., 1., ..., 1., 1., 1.], shape=(1000000,)), 'dataset': 'drell-yan'} successfully! Now is: Hist(
-#   Regular(10, -2, 2, name='x', label='X Axis'),
-#   Regular(10, -2, 2, name='y', label='Y Axis'),
-#   StrCategory(['data', 'drell-yan'], overflow=False, name='dataset', label='Dataset'),
-#   storage=Weight()) # Sum: WeightedSum(value=1.82276e+06, variance=1.82276e+06) (WeightedSum(value=2e+06, variance=2e+06) with flow)
+# Remote hist initialized: RemoteHist<ID=765396215d2a4cef8c232b8085ea369f @[::]:50051>
+# Histogram remote_hist received: success: true
 #
-# Histogram remote_hist received: Histogram flushed successfully to hist.coffea.
+# Snapshotting current hist Hist(
+#   Regular(10, -2, 2, name='x', label='X Axis'),
+#   Regular(10, -2, 2, name='y', label='Y Axis'),
+#   StrCategory(['data', 'drell-yan'], growth=True, name='dataset', label='Dataset'),
+#   storage=Weight()) # Sum: WeightedSum(value=911611, variance=911611) (WeightedSum(value=1e+06, variance=1e+06) with flow)
+# Histogram remote_hist received: success: true
+#
+# Histogram remote_hist received: success: true
+# 
+# Histogram remote_hist received: Histogram flushed successfully to hist.h5.
 ```
+
+Or an example coffea Processor:
+```shell
+python example/coffea_processor.py
+# All remote fills succeeded!
+# Output hist: Hist(
+#   Regular(10, -2, 2, name='x', label='X Axis'),
+#   Regular(10, -2, 2, name='y', label='Y Axis'),
+#   StrCategory(['data', 'drell-yan'], growth=True, name='dataset', label='Dataset'),
+#   storage=Weight()) # Sum: WeightedSum(value=3.64502e+06, variance=3.64502e+06) (WeightedSum(value=4e+06, variance=4e+06) with flow)
+```
+
 
 And the server logs additionally (after running the client script):
 ```shell
 # INFO:haas-server:Filled histogram with 24,000,000 bytes
 # INFO:haas-server:Filled histogram with 24,000,000 bytes
-# INFO:haas-server:Flushed histogram to hist.coffea
+# INFO:haas-server:Filled histogram with 24,000,000 bytes
+# INFO:haas-server:Flushed histogram to hist.h5
 ```
 
 ## Current supported types

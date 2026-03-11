@@ -2,27 +2,60 @@ syntax = "proto3";
 
 // The histogram service definition.
 service HistogrammerService {
+  // Sends a histogram initialization request
+  rpc Init(InitRequest) returns (InitResponse) {}
   // Sends a filling request
   rpc Fill(FillRequest) returns (FillResponse) {}
-  // Sends a flushing request
+  // Sends a snapshot request of the current histogram
+  rpc SnapShot(SnapShotRequest) returns (SnapShotResponse) {}
+  // Sends a flushing request (to disk)
   rpc Flush(FlushRequest) returns (FlushResponse) {}
+}
+
+// This request sends JSON payload to initialize the histogram on the server
+message InitRequest {
+  string hist_json = 1;
+}
+
+// The response message
+message InitResponse {
+  bool success = 1; // indicates if the operation was successful
+  string message = 2; // additional information or error message
 }
 
 // The request message containing the values to fill the histogram.
 // This map is essentially **kwargs that is passed to histogram.fill(**kwargs)
 message FillRequest {
-  map<string, Value> kwargs = 1;
-}
-
-// The request message for flushing the histogram.
-message FlushRequest {
-  string destination = 1; // where to flush the histogram data
+  string hist_id = 1;
+  map<string, Value> kwargs = 2;
 }
 
 // The response messages
 message FillResponse {
   bool success = 1; // indicates if the operation was successful
   string message = 2; // additional information or error message
+}
+
+// This request sends JSON payload to initialize the histogram on the server
+message SnapShotRequest {
+  string hist_id = 1;
+  bool drop_from_server = 2;
+}
+
+// The response message
+message SnapShotResponse {
+  bool success = 1; // indicates if the operation was successful
+  string message = 2; // additional information or error message
+
+  // this can only be returned is success is True
+  string hist_json = 3;
+  map<string, Value> data = 4;
+}
+
+// The request message for flushing the histogram.
+message FlushRequest {
+  string hist_id = 1;
+  string destination = 2; // where to flush the histogram data
 }
 
 // is there a better way to re-use the result messages?
@@ -35,10 +68,10 @@ message FlushResponse {
 message Dtype {
   enum Type {
     // add more types as needed
-    DT_FLOAT32 = 0;
-    DT_FLOAT64 = 1;
-    DT_INT32 = 2;
-    DT_INT64 = 3;
+    TYPE_DT_FLOAT32 = 0;
+    TYPE_DT_FLOAT64 = 1;
+    TYPE_DT_INT32 = 2;
+    TYPE_DT_INT64 = 3;
   }
 
   Type type = 2;

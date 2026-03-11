@@ -2,27 +2,65 @@ from __future__ import annotations
 
 import logging
 from concurrent import futures
+import json
+import uuid
 
 import grpc
 import hist
+import hist.serialization
 import numpy as np
+import uhi.io.json
+
 
 from haas.protos import hist_pb2, hist_pb2_grpc
-from haas.serialize import deserialize
+from haas.serialize import deserialize, serialize
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("haas-server")
 
 
 class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
-    def __init__(self, hist: hist.Hist) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self.hist = hist
+        self._hists = {}
+
+    @property
+    def hists(self):
+        return self._hists
+
+    async def Init(
+        self, request: hist_pb2.InitRequest, context: grpc.ServicerContext
+    ) -> hist_pb2.InitResponse:
+        # generate unique key
+        H_id = uuid.uuid4().hex
+
+        # make sure it doesn't exist (should basically never happen)
+        if H_id in self.hists:
+            return hist_pb2.InitResponse(
+                success=False,
+                message="try again; init failed due to existing key.",
+            )
+
+        # deserialize message to histogram
+        H = hist.Hist(
+            json.loads(request.hist_json, object_hook=uhi.io.json.object_hook)
+        )
+
+        # store histogram
+        self._hists[H_id] = H
+
+        # return H_id to client to access it again
+        return hist_pb2.InitResponse(
+            success=True,
+            message=H_id,
+        )
 
     async def Fill(
         self, request: hist_pb2.FillRequest, context: grpc.ServicerContext
     ) -> hist_pb2.FillResponse:
         del context  # unused
+
+        H_id = request.hist_id
 
         try:
             # Deserialize the message from the request
@@ -32,18 +70,52 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 success=False, message=f"Error deserializing request: {e!r}"
             )
         try:
-            self.hist.fill(**kwargs)
+            self.hists[H_id].fill(**kwargs)
             nbytes_filled = sum(
                 [nd.nbytes for nd in kwargs.values() if isinstance(nd, np.ndarray)]
             )
             logger.info(f"Filled histogram with {nbytes_filled:,} bytes")
-            return hist_pb2.FillResponse(
-                success=True,
-                message=f"Histogram filled {kwargs!r} successfully! Now is: {self.hist!r}",
-            )
+            return hist_pb2.FillResponse(success=True, message=None)
         except Exception as e:
             return hist_pb2.FillResponse(
                 success=False, message=f"Error filling histogram: {e!r}"
+            )
+
+    async def SnapShot(
+        self, request: hist_pb2.SnapShotRequest, context: grpc.ServicerContext
+    ) -> hist_pb2.SnapShotResponse:
+        del context  # unused
+
+        H_id = request.hist_id
+
+        try:
+            if request.drop_from_server:
+                H = self.hists.pop(H_id)
+            else:
+                H = self.hists[H_id]
+
+            # serialize
+            H_ser = hist.serialization.to_uhi(H)
+            storage = H_ser.pop("storage")
+            # recover type
+            H_ser["storage"] = {"type": storage.pop("type")}
+
+            # serialize all contents
+            data_ser = {k: serialize(v) for k, v in storage.items()}
+
+            return hist_pb2.SnapShotResponse(
+                success=True,
+                message="",
+                hist_json=json.dumps(H_ser),  # pure metadata
+                data=data_ser,  # heavy contents
+            )
+
+        except Exception as e:
+            return hist_pb2.SnapShotResponse(
+                success=False,
+                message=f"Failed creating a snapshot: {e!r}",
+                hist_json="",
+                data={},
             )
 
     async def Flush(
@@ -54,7 +126,9 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
 
         del context  # unused
 
+        H_id = request.hist_id
         destination = request.destination
+
         if not destination.endswith((".h5", ".hdf5")):
             return hist_pb2.FlushResponse(
                 success=False,
@@ -62,8 +136,9 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
             )
 
         try:
+            H = self.hists[H_id]
             with h5py.File(destination, "w") as h5_file:
-                uhi.io.hdf5.write(h5_file.create_group("histogram"), self.hist)
+                uhi.io.hdf5.write(h5_file.create_group("histogram"), H)
 
             logger.info(f"Flushed histogram to {destination}")
             return hist_pb2.FlushResponse(
@@ -78,9 +153,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
 
 
 class Server:
-    def __init__(
-        self, histogram: hist.Hist, port: int = 50051, n_threads: int = 1
-    ) -> None:
+    def __init__(self, port: int = 50051, n_threads: int = 1) -> None:
         self.port = port
         self.n_threads = n_threads
 
@@ -94,7 +167,7 @@ class Server:
             ],
         )
         # add service
-        histogrammer = Histogrammer(hist=histogram)
+        histogrammer = Histogrammer()
         hist_pb2_grpc.add_HistogrammerServiceServicer_to_server(
             histogrammer, self.server
         )

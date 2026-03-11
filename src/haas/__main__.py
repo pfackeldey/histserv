@@ -17,23 +17,14 @@ async def main() -> None:
     ap = ArgumentParser()
     ap.add_argument("-p", "--port", default=0, type=int)
     ap.add_argument("-t", "--n-threads", default=1, type=int)
-    ap.add_argument(
-        "--hist-ir", default=None, type=str, help="JSON Hist IR", required=True
-    )
 
     args = ap.parse_args()
 
     if not 0 <= args.port < 0xFFFF:
         raise ValueError("port must be between 0 and 65535")
 
-    # load histogram from JSON IR
-    hist_ir = json.loads(args.hist_ir, object_hook=uhi.io.json.object_hook)
-    histogram = hist.Hist(hist_ir)
-
-    logger.info(f"Histogram setup successfully: {histogram}")
-
     # start server
-    server = Server(histogram=histogram, port=args.port, n_threads=args.n_threads)
+    server = Server(port=args.port, n_threads=args.n_threads)
     await server.start()
 
     async def server_graceful_shutdown():

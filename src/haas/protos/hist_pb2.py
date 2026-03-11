@@ -20,7 +20,7 @@ _sym_db = _symbol_database.Default()
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\nhist.proto"n\n\x0b\x46illRequest\x12(\n\x06kwargs\x18\x01 \x03(\x0b\x32\x18.FillRequest.KwargsEntry\x1a\x35\n\x0bKwargsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x15\n\x05value\x18\x02 \x01(\x0b\x32\x06.Value:\x02\x38\x01"#\n\x0c\x46lushRequest\x12\x13\n\x0b\x64\x65stination\x18\x01 \x01(\t"0\n\x0c\x46illResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t"1\n\rFlushResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t"f\n\x05\x44type\x12\x19\n\x04type\x18\x02 \x01(\x0e\x32\x0b.Dtype.Type"B\n\x04Type\x12\x0e\n\nDT_FLOAT32\x10\x00\x12\x0e\n\nDT_FLOAT64\x10\x01\x12\x0c\n\x08\x44T_INT32\x10\x02\x12\x0c\n\x08\x44T_INT64\x10\x03"=\n\x07Ndarray\x12\r\n\x05shape\x18\x01 \x03(\x03\x12\x15\n\x05\x64type\x18\x02 \x01(\x0b\x32\x06.Dtype\x12\x0c\n\x04\x64\x61ta\x18\x03 \x01(\x0c"t\n\x05Value\x12\x1f\n\x0b\x61rray_value\x18\x01 \x01(\x0b\x32\x08.NdarrayH\x00\x12\x16\n\x0cstring_value\x18\x02 \x01(\tH\x00\x12\x13\n\tint_value\x18\x03 \x01(\x03H\x00\x12\x14\n\nbool_value\x18\x04 \x01(\x08H\x00\x42\x07\n\x05value2f\n\x13HistogrammerService\x12%\n\x04\x46ill\x12\x0c.FillRequest\x1a\r.FillResponse"\x00\x12(\n\x05\x46lush\x12\r.FlushRequest\x1a\x0e.FlushResponse"\x00\x62\x06proto3'
+    b'\n\nhist.proto" \n\x0bInitRequest\x12\x11\n\thist_json\x18\x01 \x01(\t"0\n\x0cInitResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t"\x7f\n\x0b\x46illRequest\x12\x0f\n\x07hist_id\x18\x01 \x01(\t\x12(\n\x06kwargs\x18\x02 \x03(\x0b\x32\x18.FillRequest.KwargsEntry\x1a\x35\n\x0bKwargsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x15\n\x05value\x18\x02 \x01(\x0b\x32\x06.Value:\x02\x38\x01"0\n\x0c\x46illResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t"<\n\x0fSnapShotRequest\x12\x0f\n\x07hist_id\x18\x01 \x01(\t\x12\x18\n\x10\x64rop_from_server\x18\x02 \x01(\x08"\xa7\x01\n\x10SnapShotResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x11\n\thist_json\x18\x03 \x01(\t\x12)\n\x04\x64\x61ta\x18\x04 \x03(\x0b\x32\x1b.SnapShotResponse.DataEntry\x1a\x33\n\tDataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x15\n\x05value\x18\x02 \x01(\x0b\x32\x06.Value:\x02\x38\x01"4\n\x0c\x46lushRequest\x12\x0f\n\x07hist_id\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65stination\x18\x02 \x01(\t"1\n\rFlushResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t"z\n\x05\x44type\x12\x19\n\x04type\x18\x02 \x01(\x0e\x32\x0b.Dtype.Type"V\n\x04Type\x12\x13\n\x0fTYPE_DT_FLOAT32\x10\x00\x12\x13\n\x0fTYPE_DT_FLOAT64\x10\x01\x12\x11\n\rTYPE_DT_INT32\x10\x02\x12\x11\n\rTYPE_DT_INT64\x10\x03"=\n\x07Ndarray\x12\r\n\x05shape\x18\x01 \x03(\x03\x12\x15\n\x05\x64type\x18\x02 \x01(\x0b\x32\x06.Dtype\x12\x0c\n\x04\x64\x61ta\x18\x03 \x01(\x0c"t\n\x05Value\x12\x1f\n\x0b\x61rray_value\x18\x01 \x01(\x0b\x32\x08.NdarrayH\x00\x12\x16\n\x0cstring_value\x18\x02 \x01(\tH\x00\x12\x13\n\tint_value\x18\x03 \x01(\x03H\x00\x12\x14\n\nbool_value\x18\x04 \x01(\x08H\x00\x42\x07\n\x05value2\xc0\x01\n\x13HistogrammerService\x12%\n\x04Init\x12\x0c.InitRequest\x1a\r.InitResponse"\x00\x12%\n\x04\x46ill\x12\x0c.FillRequest\x1a\r.FillResponse"\x00\x12\x31\n\x08SnapShot\x12\x10.SnapShotRequest\x1a\x11.SnapShotResponse"\x00\x12(\n\x05\x46lush\x12\r.FlushRequest\x1a\x0e.FlushResponse"\x00\x62\x06proto3'
 )
 
 _globals = globals()
@@ -30,24 +30,36 @@ if not _descriptor._USE_C_DESCRIPTORS:
     DESCRIPTOR._loaded_options = None
     _globals["_FILLREQUEST_KWARGSENTRY"]._loaded_options = None
     _globals["_FILLREQUEST_KWARGSENTRY"]._serialized_options = b"8\001"
-    _globals["_FILLREQUEST"]._serialized_start = 14
-    _globals["_FILLREQUEST"]._serialized_end = 124
-    _globals["_FILLREQUEST_KWARGSENTRY"]._serialized_start = 71
-    _globals["_FILLREQUEST_KWARGSENTRY"]._serialized_end = 124
-    _globals["_FLUSHREQUEST"]._serialized_start = 126
-    _globals["_FLUSHREQUEST"]._serialized_end = 161
-    _globals["_FILLRESPONSE"]._serialized_start = 163
-    _globals["_FILLRESPONSE"]._serialized_end = 211
-    _globals["_FLUSHRESPONSE"]._serialized_start = 213
-    _globals["_FLUSHRESPONSE"]._serialized_end = 262
-    _globals["_DTYPE"]._serialized_start = 264
-    _globals["_DTYPE"]._serialized_end = 366
-    _globals["_DTYPE_TYPE"]._serialized_start = 300
-    _globals["_DTYPE_TYPE"]._serialized_end = 366
-    _globals["_NDARRAY"]._serialized_start = 368
-    _globals["_NDARRAY"]._serialized_end = 429
-    _globals["_VALUE"]._serialized_start = 431
-    _globals["_VALUE"]._serialized_end = 547
-    _globals["_HISTOGRAMMERSERVICE"]._serialized_start = 549
-    _globals["_HISTOGRAMMERSERVICE"]._serialized_end = 651
+    _globals["_SNAPSHOTRESPONSE_DATAENTRY"]._loaded_options = None
+    _globals["_SNAPSHOTRESPONSE_DATAENTRY"]._serialized_options = b"8\001"
+    _globals["_INITREQUEST"]._serialized_start = 14
+    _globals["_INITREQUEST"]._serialized_end = 46
+    _globals["_INITRESPONSE"]._serialized_start = 48
+    _globals["_INITRESPONSE"]._serialized_end = 96
+    _globals["_FILLREQUEST"]._serialized_start = 98
+    _globals["_FILLREQUEST"]._serialized_end = 225
+    _globals["_FILLREQUEST_KWARGSENTRY"]._serialized_start = 172
+    _globals["_FILLREQUEST_KWARGSENTRY"]._serialized_end = 225
+    _globals["_FILLRESPONSE"]._serialized_start = 227
+    _globals["_FILLRESPONSE"]._serialized_end = 275
+    _globals["_SNAPSHOTREQUEST"]._serialized_start = 277
+    _globals["_SNAPSHOTREQUEST"]._serialized_end = 337
+    _globals["_SNAPSHOTRESPONSE"]._serialized_start = 340
+    _globals["_SNAPSHOTRESPONSE"]._serialized_end = 507
+    _globals["_SNAPSHOTRESPONSE_DATAENTRY"]._serialized_start = 456
+    _globals["_SNAPSHOTRESPONSE_DATAENTRY"]._serialized_end = 507
+    _globals["_FLUSHREQUEST"]._serialized_start = 509
+    _globals["_FLUSHREQUEST"]._serialized_end = 561
+    _globals["_FLUSHRESPONSE"]._serialized_start = 563
+    _globals["_FLUSHRESPONSE"]._serialized_end = 612
+    _globals["_DTYPE"]._serialized_start = 614
+    _globals["_DTYPE"]._serialized_end = 736
+    _globals["_DTYPE_TYPE"]._serialized_start = 650
+    _globals["_DTYPE_TYPE"]._serialized_end = 736
+    _globals["_NDARRAY"]._serialized_start = 738
+    _globals["_NDARRAY"]._serialized_end = 799
+    _globals["_VALUE"]._serialized_start = 801
+    _globals["_VALUE"]._serialized_end = 917
+    _globals["_HISTOGRAMMERSERVICE"]._serialized_start = 920
+    _globals["_HISTOGRAMMERSERVICE"]._serialized_end = 1112
 # @@protoc_insertion_point(module_scope)
