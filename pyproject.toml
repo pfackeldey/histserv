@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build>=0.9.7,<0.10.0"]
+requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
 
 
@@ -11,23 +11,51 @@ readme = "README.md"
 authors = [
     { name = "pfackeldey", email = "fackeldey.peter@gmail.com" }
 ]
+license = "BSD-3-Clause"
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Typing :: Typed",
+]
+keywords = [
+    "histogram",
+    "boost-histogram",
+    "distributed",
+    "serving",
+]
 requires-python = ">=3.10"
 dependencies = [
     "grpcio>=1.76.0",
     "hist>=2.9.0",
     "boost-histogram>=1.7.1",
-    "fsspec>=2025.10.0",
     "uhi>=1.0.0",
-    "lz4>=4.4.5",
     "numcodecs>=0.13.1",
     "grpcio-tools>=1.78.0",
-    "h5py>=3.15.1",
 ]
 
+[project.urls]
+Homepage = "https://github.com/pfackeldey/histserv"
+"Bug Tracker" = "https://github.com/pfackeldey/histserv/issues"
+Discussions = "https://github.com/pfackeldey/histserv/discussions"
 
 [dependency-groups]
 dev = [
     "ipython",
+    "h5py", # needed only for the `.flush` RPC call on the server
 ]
 
 [project.scripts]
