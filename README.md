@@ -1,4 +1,4 @@
-# Histogramming as a Service (HaaS)
+# Histogramming as a Service (HistServ)
 
 ## Install
 ```shell
@@ -11,8 +11,8 @@ See `example/`.
 
 Start gRPC server (or just `./example/start_server.sh`):
 ```shell
-haas-server --port 50051 --n-threads 4
-# INFO:haas-server:Histogram server started, listening on [::]:50051 with 4 threads
+histserv-server --port 50051 --n-threads 4
+# INFO:histserv-server:Histogram server started, listening on [::]:50051 with 4 threads
 ```
 
 Run example client:
@@ -48,10 +48,10 @@ python example/coffea_processor.py
 
 And the server logs additionally (after running the client script):
 ```shell
-# INFO:haas-server:Filled histogram with 24,000,000 bytes
-# INFO:haas-server:Filled histogram with 24,000,000 bytes
-# INFO:haas-server:Filled histogram with 24,000,000 bytes
-# INFO:haas-server:Flushed histogram to hist.h5
+# INFO:histserv-server:Filled histogram with 24,000,000 bytes
+# INFO:histserv-server:Filled histogram with 24,000,000 bytes
+# INFO:histserv-server:Filled histogram with 24,000,000 bytes
+# INFO:histserv-server:Flushed histogram to hist.h5
 ```
 
 ## Current supported types
@@ -81,6 +81,6 @@ uv pip install -e . --group=dev
 ### protobuf codegen
 
 ```shell
-python -m grpc_tools.protoc -Isrc/haas/protos --python_out=src/haas/protos --pyi_out=src/haas/protos --grpc_python_out=src/haas/protos src/haas/protos/hist.proto
+python -m grpc_tools.protoc -Isrc/histserv/protos --python_out=src/histserv/protos --pyi_out=src/histserv/protos --grpc_python_out=src/histserv/protos src/histserv/protos/hist.proto
 ```
-Maybe adjust imports in `src/haas/protos/hist_pb2_grpc.py`.
+Maybe adjust imports in `src/histserv/protos/hist_pb2_grpc.py`.

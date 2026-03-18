@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 
 [project]
-name = "haas"
+name = "histserv"
 version = "0.1.0"
 description = "Histogramming as a Service"
 readme = "README.md"
@@ -31,4 +31,4 @@ dev = [
 ]
 
 [project.scripts]
-haas-server = "haas.__main__:run"
+histserv-server = "histserv.__main__:run"

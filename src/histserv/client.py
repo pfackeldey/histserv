@@ -9,14 +9,14 @@ from hist import Hist
 import json
 import uhi.io.json
 
-from haas.protos import hist_pb2, hist_pb2_grpc
-from haas.serialize import serialize, deserialize
+from histserv.protos import hist_pb2, hist_pb2_grpc
+from histserv.serialize import serialize, deserialize
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class HaaSClient:
+class HistServClient:
     def __init__(self, address: str) -> None:
         self.address = address
 
@@ -25,7 +25,7 @@ class HaaSClient:
         state.pop("channel", None)
         return state
 
-    def __enter__(self) -> HaaSClient:
+    def __enter__(self) -> HistServClient:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
@@ -67,12 +67,12 @@ class HaaSClient:
 class RemoteHist:
     __slots__ = ("_client", "_hist_id")
 
-    def __init__(self, client: HaaSClient, hist_id: str) -> None:
+    def __init__(self, client: HistServClient, hist_id: str) -> None:
         self._client = client
         self._hist_id = hist_id
 
     @property
-    def client(self) -> HaaSClient:
+    def client(self) -> HistServClient:
         return self._client
 
     @property

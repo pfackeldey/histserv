@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from argparse import ArgumentParser
 
-from haas.server import Server, logger
+from histserv.server import Server, logger
 
 # Coroutines to be invoked when the event loop is shutting down.
 _cleanup_coroutines = []

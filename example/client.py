@@ -3,7 +3,7 @@ from __future__ import annotations
 import hist
 import numpy as np
 
-from haas import HaaSClient
+from histserv import HistServClient
 
 
 # some histogram to fill
@@ -18,8 +18,8 @@ H = hist.Hist(
 
 
 if __name__ == "__main__":
-    # connect to remote HaaS gRPC server
-    with HaaSClient(address="[::]:50051") as client:
+    # connect to remote HistServ gRPC server
+    with HistServClient(address="[::]:50051") as client:
         # initialize it on the server and receive a 'remote_hist' to interact with it
         remote_hist = client.init(H)
 

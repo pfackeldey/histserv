@@ -12,11 +12,11 @@ import numpy as np
 import uhi.io.json
 
 
-from haas.protos import hist_pb2, hist_pb2_grpc
-from haas.serialize import deserialize, serialize
+from histserv.protos import hist_pb2, hist_pb2_grpc
+from histserv.serialize import deserialize, serialize
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("haas-server")
+logger = logging.getLogger("histserv-server")
 
 
 class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):

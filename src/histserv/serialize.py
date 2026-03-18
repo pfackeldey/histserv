@@ -5,7 +5,7 @@ import typing as tp
 import numcodecs
 import numpy as np
 
-from haas.protos import hist_pb2
+from histserv.protos import hist_pb2
 
 # hardcode for now, make it configurable later
 codec = numcodecs.Blosc(cname="zstd", clevel=9, shuffle=numcodecs.Blosc.BITSHUFFLE)
