@@ -40,7 +40,8 @@ def run() -> None:
     try:
         loop.run_until_complete(main())
     finally:
-        loop.run_until_complete(*_cleanup_coroutines)
+        if _cleanup_coroutines:
+            loop.run_until_complete(*_cleanup_coroutines)
         loop.close()
 
 
