@@ -20,11 +20,18 @@ async def main() -> None:
         raise ValueError("port must be between 0 and 65535")
 
     # start server
-    server = Server(port=args.port, n_threads=args.n_threads)
+    server = Server(
+        port=args.port,
+        n_threads=args.n_threads,
+    )
     await server.start()
 
     async def server_graceful_shutdown():
         logger.info("Starting graceful shutdown...")
+
+        for task in server.callbacks:
+            task.cancel()
+
         # Shuts down the server with 5 seconds of grace period. During the
         # grace period, the server won't accept new connections and allow
         # existing RPCs to continue within the grace period.

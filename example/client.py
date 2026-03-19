@@ -32,14 +32,12 @@ if __name__ == "__main__":
             dataset="data",
             weight=np.ones(1_000_000, dtype=np.float64),
         )
-        print(f"Histogram remote_hist received: {response}")
+        print(f"Remote hist filled successfully? -> {response.success}")
 
         # Creating a snapshot means to return the current state of the remote_hist to the client
         # The `drop_from_server` option allows to remove the histogram from the server's memory if set to True
         print(
-            "Snapshotting current hist:",
-            remote_hist.snapshot(drop_from_server=False),
-            "\n",
+            "Snapshotting current hist:", remote_hist.snapshot(drop_from_server=False)
         )
 
         # fill histogram remotely again with different dataset
@@ -49,7 +47,7 @@ if __name__ == "__main__":
             dataset="drell-yan",
             weight=np.ones(1_000_000, dtype=np.float64),
         )
-        print(f"Histogram remote_hist received: {response}")
+        print(f"Remote hist filled successfully? -> {response.success}")
 
         # fill histogram remotely again with different dataset (something that triggers axis growth)
         response = remote_hist.fill(
@@ -58,8 +56,8 @@ if __name__ == "__main__":
             dataset="ttbar",
             weight=np.ones(1_000_000, dtype=np.float64),
         )
-        print(f"Histogram remote_hist received: {response}")
+        print(f"Remote hist filled successfully? -> {response.success}")
 
         # flush histogram remotely to file
         response = remote_hist.flush(destination="hist.h5")
-        print(f"Histogram remote_hist received: {response.message}")
+        print(f"Remote hist flushed succesfully? -> {response.message}")
