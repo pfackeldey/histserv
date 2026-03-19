@@ -2,7 +2,7 @@
 
 ## Install
 ```shell
-uv pip install .
+pip install histserv
 ```
 
 ## Example
