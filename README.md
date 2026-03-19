@@ -18,20 +18,20 @@ histserv --port 50051 --n-threads 4
 Run example client:
 ```shell
 python example/client.py
-# Remote hist initialized: RemoteHist<ID=765396215d2a4cef8c232b8085ea369f @[::]:50051>
+# Remote hist initialized: RemoteHist<ID=eccd04e4b6e64523aae410ea0fe1f15f @[::]:50051>
 # Histogram remote_hist received: success: true
 #
 # Snapshotting current hist: Hist(
 #   Regular(10, -2, 2, name='x', label='X Axis'),
 #   Regular(10, -2, 2, name='y', label='Y Axis'),
 #   StrCategory(['data', 'drell-yan'], growth=True, name='dataset', label='Dataset'),
-#   storage=Weight()) # Sum: WeightedSum(value=911611, variance=911611) (WeightedSum(value=1e+06, variance=1e+06) with flow)
+#  storage=Weight()) # Sum: WeightedSum(value=910974, variance=910974) (WeightedSum(value=1e+06, variance=1e+06) with flow)
 #
 # Histogram remote_hist received: success: true
 #
 # Histogram remote_hist received: success: true
-# 
-# Histogram remote_hist received: Histogram flushed successfully to hist.h5.
+#
+# Histogram remote_hist received: Histogram (eccd04e4b6e64523aae410ea0fe1f15f) flushed successfully to hist.h5.
 ```
 
 Or an example coffea Processor:
@@ -48,10 +48,11 @@ python example/coffea_processor.py
 
 And the server logs additionally (after running the client script):
 ```shell
-# INFO:histserv:Filled histogram with 24,000,000 bytes
-# INFO:histserv:Filled histogram with 24,000,000 bytes
-# INFO:histserv:Filled histogram with 24,000,000 bytes
-# INFO:histserv:Flushed histogram to hist.h5
+# INFO:histserv:Initialized histogram (eccd04e4b6e64523aae410ea0fe1f15f)
+# INFO:histserv:Filled histogram (eccd04e4b6e64523aae410ea0fe1f15f) with 24,000,000 bytes
+# INFO:histserv:Filled histogram (eccd04e4b6e64523aae410ea0fe1f15f) with 24,000,000 bytes
+# INFO:histserv:Filled histogram (eccd04e4b6e64523aae410ea0fe1f15f) with 24,000,000 bytes
+# INFO:histserv:Flushed histogram (eccd04e4b6e64523aae410ea0fe1f15f) to hist.h5)
 ```
 
 ## Current supported types
