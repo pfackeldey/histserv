@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class HistServClient:
+class Client:
     def __init__(self, address: str) -> None:
         self.address = address
 
@@ -25,7 +25,7 @@ class HistServClient:
         state.pop("channel", None)
         return state
 
-    def __enter__(self) -> HistServClient:
+    def __enter__(self) -> Client:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
@@ -67,12 +67,12 @@ class HistServClient:
 class RemoteHist:
     __slots__ = ("_client", "_hist_id")
 
-    def __init__(self, client: HistServClient, hist_id: str) -> None:
+    def __init__(self, client: Client, hist_id: str) -> None:
         self._client = client
         self._hist_id = hist_id
 
     @property
-    def client(self) -> HistServClient:
+    def client(self) -> Client:
         return self._client
 
     @property

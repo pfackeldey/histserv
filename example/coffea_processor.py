@@ -1,9 +1,9 @@
 import hist
-from histserv import HistServClient
+from histserv import Client
 
 
 class Processor:
-    def __init__(self, histserv_client: HistServClient):
+    def __init__(self, client: Client):
         # setup a histogram to fill
         H = hist.Hist(
             hist.axis.Regular(10, -2, 2, name="x", label="X Axis"),
@@ -17,7 +17,7 @@ class Processor:
         # initialize it on the server and receive a 'remote_hist' to interact with it
         # do that only once on the host machine, every `init` will initialize a new
         # histogram to fill on the server, but we only want to do that once and fill that one
-        self.remote_hist = histserv_client.init(H)
+        self.remote_hist = client.init(H)
 
     def process(self, events):
         # simple example fill
@@ -40,9 +40,9 @@ class Processor:
 
 
 if __name__ == "__main__":
-    client = HistServClient(address="[::]:50051")
+    client = Client(address="[::]:50051")
 
-    myanalysis = Processor(histserv_client=client)
+    myanalysis = Processor(client=client)
 
     # check pickling works for coffea dask workflows
     import pickle
