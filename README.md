@@ -1,8 +1,17 @@
 # Histogramming as a Service (HistServ)
 
-## Install
+[![PyPI version][pypi-version]][pypi-link]
+[![Conda-Forge][conda-badge]][conda-link]
+[![PyPI platforms][pypi-platforms]][pypi-link]
+
+## Install PyPI
 ```shell
 pip install histserv
+```
+
+## Install Conda-Forge
+```shell
+conda install -c conda-forge histserv
 ```
 
 ## Example
@@ -66,9 +75,17 @@ Axis support:
 uv pip install -e . --group=dev
 ```
 
-### protobuf codegen
+### Protobuf Codegen
 
 ```shell
 python -m grpc_tools.protoc -Isrc/histserv/protos --python_out=src/histserv/protos --pyi_out=src/histserv/protos --grpc_python_out=src/histserv/protos src/histserv/protos/hist.proto
 ```
 Maybe adjust imports in `src/histserv/protos/hist_pb2_grpc.py`.
+
+
+<!--Badge URLs-->
+[conda-badge]: https://img.shields.io/conda/vn/conda-forge/histserv
+[conda-link]: https://github.com/conda-forge/histserv-feedstock
+[pypi-link]: https://pypi.org/project/histserv/
+[pypi-platforms]: https://img.shields.io/pypi/pyversions/histserv
+[pypi-version]: https://badge.fury.io/py/histserv.svg
