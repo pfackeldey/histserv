@@ -16,7 +16,7 @@ from histserv.protos import hist_pb2, hist_pb2_grpc
 from histserv.serialize import deserialize, serialize
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("histserv-server")
+logger = logging.getLogger("histserv")
 
 
 class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):

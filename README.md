@@ -11,8 +11,8 @@ See `example/`.
 
 Start gRPC server (or just `./example/start_server.sh`):
 ```shell
-histserv-server --port 50051 --n-threads 4
-# INFO:histserv-server:Histogram server started, listening on [::]:50051 with 4 threads
+histserv --port 50051 --n-threads 4
+# INFO:histserv:Histogram server started, listening on [::]:50051 with 4 threads
 ```
 
 Run example client:
@@ -48,10 +48,10 @@ python example/coffea_processor.py
 
 And the server logs additionally (after running the client script):
 ```shell
-# INFO:histserv-server:Filled histogram with 24,000,000 bytes
-# INFO:histserv-server:Filled histogram with 24,000,000 bytes
-# INFO:histserv-server:Filled histogram with 24,000,000 bytes
-# INFO:histserv-server:Flushed histogram to hist.h5
+# INFO:histserv:Filled histogram with 24,000,000 bytes
+# INFO:histserv:Filled histogram with 24,000,000 bytes
+# INFO:histserv:Filled histogram with 24,000,000 bytes
+# INFO:histserv:Flushed histogram to hist.h5
 ```
 
 ## Current supported types
