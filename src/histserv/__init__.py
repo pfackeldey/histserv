@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 __author__ = "Peter Fackeldey"
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 __all__ = ["Client", "Server"]
 
