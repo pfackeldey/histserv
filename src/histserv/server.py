@@ -135,7 +135,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
             return hist_pb2.SnapShotResponse(
                 success=True,
                 message=success_msg,
-                hist_json=json.dumps(H_ser),  # pure metadata
+                hist_json=json.dumps(H_ser, default=uhi.io.json.default),  # metadata
                 data=data_ser,  # heavy contents
             )
 

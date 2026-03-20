@@ -18,19 +18,25 @@ from histserv.protos import hist_pb2
 codec = numcodecs.Blosc(cname="zstd", clevel=1, shuffle=numcodecs.Blosc.BITSHUFFLE)
 
 
-def serialize_nparray(item: np.ndarray) -> hist_pb2.Ndarray:
-    assert isinstance(item, np.ndarray)
+def serialize_nparray(item: np.ndarray | list | tuple) -> hist_pb2.Ndarray:
+    item = np.ascontiguousarray(item)
 
     shape = list(item.shape)
     dtype = _numpy_dtype_to_proto_dtype(item.dtype)
-    compressed_data = codec.encode(np.ascontiguousarray(item).tobytes())
+
+    # only compress array with more than 16 bytes
+    if item.nbytes < 16:
+        compressed_data = item.tobytes()
+    else:
+        compressed_data = codec.encode(item.tobytes())
+
     return hist_pb2.Ndarray(shape=shape, dtype=dtype, data=compressed_data)
 
 
 def serialize(item: tp.Any) -> hist_pb2.Value:
     """Serialize something into a hist_pb2.Value message."""
     msg = hist_pb2.Value()
-    if isinstance(item, np.ndarray):
+    if isinstance(item, (np.ndarray, list, tuple)):  # do we need to handle more types?
         msg.array_value.CopyFrom(serialize_nparray(item))
     elif isinstance(item, str):
         msg.string_value = item
@@ -65,7 +71,13 @@ def deserialize(message: hist_pb2.Value):
             ndarray = message.array_value
             shape = tuple(ndarray.shape)
             dtype = _proto_dtype_to_numpy_dtype(ndarray.dtype)
-            decompressed_data = codec.decode(ndarray.data)
+
+            # we only compress less than 16 bytes
+            if len(ndarray.data) < 16:
+                decompressed_data = ndarray.data
+            else:
+                decompressed_data = codec.decode(ndarray.data)
+
             array = np.frombuffer(decompressed_data, dtype=dtype).reshape(shape)
             return array
         case "string_value":
