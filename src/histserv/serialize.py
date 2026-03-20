@@ -8,7 +8,14 @@ import numpy as np
 from histserv.protos import hist_pb2
 
 # hardcode for now, make it configurable later
-codec = numcodecs.Blosc(cname="zstd", clevel=9, shuffle=numcodecs.Blosc.BITSHUFFLE)
+# TODO: needs to be part of protobuf to allow custom serialization per RPC call
+# In multiple local tests the codec with:
+# - algo: 'zstd'
+# - clevel: 1
+# - shuffle: BITSHUFFLE
+# yielded the best combination of compression/decompression time and compression
+# factor for float32 NanoAOD columns (Electron_mass, Jet_pt, MET_pt, ...)
+codec = numcodecs.Blosc(cname="zstd", clevel=1, shuffle=numcodecs.Blosc.BITSHUFFLE)
 
 
 def serialize_nparray(item: np.ndarray) -> hist_pb2.Ndarray:
@@ -16,7 +23,7 @@ def serialize_nparray(item: np.ndarray) -> hist_pb2.Ndarray:
 
     shape = list(item.shape)
     dtype = _numpy_dtype_to_proto_dtype(item.dtype)
-    compressed_data = codec.encode(item.tobytes())
+    compressed_data = codec.encode(np.ascontiguousarray(item).tobytes())
     return hist_pb2.Ndarray(shape=shape, dtype=dtype, data=compressed_data)
 
 
