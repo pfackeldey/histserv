@@ -4,12 +4,12 @@
 [![Conda-Forge][conda-badge]][conda-link]
 [![PyPI platforms][pypi-platforms]][pypi-link]
 
-## Install PyPI
+## Install from PyPI
 ```shell
 pip install histserv
 ```
 
-## Install Conda-Forge
+## Install from conda-forge
 ```shell
 conda install -c conda-forge histserv
 ```
