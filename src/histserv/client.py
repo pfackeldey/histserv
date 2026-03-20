@@ -47,7 +47,7 @@ class Client:
     def stub(self) -> hist_pb2_grpc.HistogrammerServiceStub:
         return hist_pb2_grpc.HistogrammerServiceStub(self.channel)
 
-    def init(self, hist: Hist) -> RemoteHist:
+    def init(self, hist: Hist, *, timeout: int = 10) -> RemoteHist:
         if not isinstance(hist, Hist):
             raise ValueError(f"`hist` must of type `hist.Hist`, got {type(hist)=}")
 
@@ -56,7 +56,7 @@ class Client:
         json_obj = json.dumps(hist, default=uhi.io.json.default)
         request = hist_pb2.InitRequest(hist_json=json_obj)
 
-        ret = self.stub.Init(request)
+        ret = self.stub.Init(request, timeout=timeout)
         if not ret.success:
             raise ValueError(ret.message)
 
@@ -82,16 +82,16 @@ class RemoteHist:
     def __repr__(self) -> str:
         return f"RemoteHist<ID={self.hist_id} @{self.client.address}>"
 
-    def fill(self, **kwargs: tp.Any) -> hist_pb2.FillResponse:
+    def fill(self, *, timeout: int = 10, **kwargs: tp.Any) -> hist_pb2.FillResponse:
         serialized_kwargs = {key: serialize(value) for key, value in kwargs.items()}
         request = hist_pb2.FillRequest(hist_id=self.hist_id, kwargs=serialized_kwargs)
-        return self.client.stub.Fill(request)
+        return self.client.stub.Fill(request, timeout=timeout)
 
-    def snapshot(self, drop_from_server: bool = False) -> Hist:
+    def snapshot(self, drop_from_server: bool = False, *, timeout: int = 10) -> Hist:
         request = hist_pb2.SnapShotRequest(
             hist_id=self.hist_id, drop_from_server=drop_from_server
         )
-        ret = self.client.stub.SnapShot(request)
+        ret = self.client.stub.SnapShot(request, timeout=timeout)
         if not ret.success:
             raise ValueError(ret.message)
 
@@ -102,6 +102,6 @@ class RemoteHist:
         hist_json["storage"].update(content)
         return Hist(hist_json)
 
-    def flush(self, destination: str = "hist.h5") -> hist_pb2.FlushResponse:
+    def flush(self, destination: str = "hist.h5", *, timeout: int = 10) -> hist_pb2.FlushResponse:
         request = hist_pb2.FlushRequest(hist_id=self.hist_id, destination=destination)
-        return self.client.stub.Flush(request)
+        return self.client.stub.Flush(request, timeout=timeout)
