@@ -72,7 +72,7 @@ def deserialize(message: hist_pb2.Value):
             shape = tuple(ndarray.shape)
             dtype = _proto_dtype_to_numpy_dtype(ndarray.dtype)
 
-            # we only compress less than 16 bytes
+            # we only compress arrays with more than 16 bytes
             if len(ndarray.data) < 16:
                 decompressed_data = ndarray.data
             else:
