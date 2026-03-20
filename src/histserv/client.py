@@ -102,6 +102,8 @@ class RemoteHist:
         hist_json["storage"].update(content)
         return Hist(hist_json)
 
-    def flush(self, destination: str = "hist.h5", *, timeout: int = 10) -> hist_pb2.FlushResponse:
+    def flush(
+        self, destination: str = "hist.h5", *, timeout: int = 10
+    ) -> hist_pb2.FlushResponse:
         request = hist_pb2.FlushRequest(hist_id=self.hist_id, destination=destination)
         return self.client.stub.Flush(request, timeout=timeout)

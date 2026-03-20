@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timedelta
 import logging
 from concurrent import futures
+from functools import partial
 import json
 import uuid
 import threading
@@ -17,9 +18,15 @@ import uhi.io.json
 
 from histserv.protos import hist_pb2, hist_pb2_grpc
 from histserv.serialize import deserialize, serialize
+from histserv.util import bytes_repr
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("histserv")
+
+
+# little helpers to format logger calls
+fmt_rpc_logger_msg = "RPC<{rpc_method}> (hist_id={hist_id}) - {msg}".format
+fmt_callback_logger_msg = "Callback<{callback_method}> - {msg}".format
 
 
 class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
@@ -43,11 +50,13 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
         # generate unique key
         H_id = uuid.uuid4().hex
 
+        fmt_rpc_msg = partial(fmt_rpc_logger_msg, rpc_method="Init", hist_id=H_id)
+
         # make sure it doesn't exist (should basically never happen)
         if H_id in self.hists:
-            msg = f"Try again; init failed due to existing key (key={H_id})."
-            logger.error(msg)
-            return hist_pb2.InitResponse(success=False, message=msg)
+            error_msg = f"try again; init failed due to existing key (key={H_id})."
+            logger.error(fmt_rpc_msg(msg=error_msg))
+            return hist_pb2.InitResponse(success=False, message=error_msg)
 
         # deserialize message to histogram
         H = hist.Hist(
@@ -59,13 +68,11 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
             self.hists_last_access[H_id] = datetime.now()
             self.hists[H_id] = H
 
-        logger.info(f"Initialized histogram ({H_id})")
+        success_msg = "initialized histogram"
+        logger.info(fmt_rpc_msg(msg=success_msg))
 
         # return H_id to client to access it again
-        return hist_pb2.InitResponse(
-            success=True,
-            message=H_id,
-        )
+        return hist_pb2.InitResponse(success=True, message=H_id)
 
     async def Fill(
         self, request: hist_pb2.FillRequest, context: grpc.ServicerContext
@@ -73,14 +80,15 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
         del context  # unused
 
         H_id = request.hist_id
+        fmt_rpc_msg = partial(fmt_rpc_logger_msg, rpc_method="Fill", hist_id=H_id)
 
         try:
             # Deserialize the message from the request
             kwargs = {key: deserialize(msg) for key, msg in request.kwargs.items()}
         except Exception as e:
-            msg = f"Error deserializing request: {e!r}"
-            logger.error(msg)
-            return hist_pb2.FillResponse(success=False, message=msg)
+            error_msg = f"error deserializing request: {e!r}"
+            logger.error(fmt_rpc_msg(msg=error_msg))
+            return hist_pb2.FillResponse(success=False, message=error_msg)
         try:
             with self._lock:
                 self.hists_last_access[H_id] = datetime.now()
@@ -88,12 +96,13 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 nbytes_filled = sum(
                     [nd.nbytes for nd in kwargs.values() if isinstance(nd, np.ndarray)]
                 )
-                logger.info(f"Filled histogram ({H_id}) with {nbytes_filled:,} bytes")
-            return hist_pb2.FillResponse(success=True, message=None)
+                success_msg = f"filled with {bytes_repr(nbytes_filled)}"
+                logger.info(fmt_rpc_msg(msg=success_msg))
+            return hist_pb2.FillResponse(success=True, message=success_msg)
         except Exception as e:
-            msg = f"Error filling histogram ({H_id}): {e!r}"
-            logger.error(msg)
-            return hist_pb2.FillResponse(success=False, message=msg)
+            error_msg = f"error filling histogram: {e!r}"
+            logger.error(fmt_rpc_msg(msg=error_msg))
+            return hist_pb2.FillResponse(success=False, message=error_msg)
 
     async def SnapShot(
         self, request: hist_pb2.SnapShotRequest, context: grpc.ServicerContext
@@ -101,6 +110,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
         del context  # unused
 
         H_id = request.hist_id
+        fmt_rpc_msg = partial(fmt_rpc_logger_msg, rpc_method="SnapShot", hist_id=H_id)
 
         try:
             with self._lock:
@@ -119,20 +129,21 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
             # serialize all contents
             data_ser = {k: serialize(v) for k, v in storage.items()}
 
-            logger.info(f"Created snapshot of histogram ({H_id})")
+            success_msg = "created snapshot"
+            logger.info(fmt_rpc_msg(msg=success_msg))
 
             return hist_pb2.SnapShotResponse(
                 success=True,
-                message="",
+                message=success_msg,
                 hist_json=json.dumps(H_ser),  # pure metadata
                 data=data_ser,  # heavy contents
             )
 
         except Exception as e:
-            msg = f"Failed creating a snapshot of histogram ({H_id}): {e!r}"
-            logger.error(msg)
+            error_msg = f"failed creating a snapshot of histogram: {e!r}"
+            logger.error(fmt_rpc_msg(msg=error_msg))
             return hist_pb2.SnapShotResponse(
-                success=False, message=msg, hist_json="", data={}
+                success=False, message=error_msg, hist_json="", data={}
             )
 
     async def Flush(
@@ -145,11 +156,12 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
 
         H_id = request.hist_id
         destination = request.destination
+        fmt_rpc_msg = partial(fmt_rpc_logger_msg, rpc_method="Flush", hist_id=H_id)
 
         if not destination.endswith((".h5", ".hdf5")):
-            msg = f"Invalid destination: {destination}, needs to be a hdf5 file, e.g., 'hist.hdf5'"
-            logger.error(msg)
-            return hist_pb2.FlushResponse(success=False, message=msg)
+            error_msg = f"invalid destination: {destination}, needs to be a hdf5 file, e.g., 'hist.hdf5'"
+            logger.error(fmt_rpc_msg(msg=error_msg))
+            return hist_pb2.FlushResponse(success=False, message=error_msg)
 
         try:
             self.hists_last_access[H_id] = datetime.now()
@@ -162,18 +174,20 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 self.hists.pop(H_id, None)
                 self.hists_last_access.pop(H_id, None)
 
-            logger.info(f"Flushed histogram ({H_id}) to {destination}")
+            success_msg = f"flushed histogram to {destination}"
+            logger.info(fmt_rpc_msg(msg=success_msg))
+
             return hist_pb2.FlushResponse(
                 success=True,
-                message=f"Histogram ({H_id}) flushed successfully to {destination}.",
+                message=success_msg,
             )
         except Exception as e:
-            msg = f"Error flushing histogram ({H_id}): {e!r} to {destination}"
-            logger.error(msg)
-            return hist_pb2.FlushResponse(success=False, message=msg)
+            error_msg = f"error flushing histogram: {e!r} to {destination}"
+            logger.error(fmt_rpc_msg(msg=error_msg))
+            return hist_pb2.FlushResponse(success=False, message=error_msg)
 
 
-# Callback to remove old hists to make the server memory not explode with long uptimes
+# Callback: remove old hists to make the server memory not explode with long uptimes
 async def prune_old_hists(histogrammer: Histogrammer, delta: timedelta) -> None:
     while True:
         now = datetime.now()
@@ -185,13 +199,36 @@ async def prune_old_hists(histogrammer: Histogrammer, delta: timedelta) -> None:
         with histogrammer._lock:
             for H_id in drop_ids:
                 logger.info(
-                    f"Dropping histogram ({H_id}) because it hasn't been accessed since {delta}"
+                    fmt_callback_logger_msg(
+                        callback_method="prune_old_hists",
+                        msg=f"dropping histogram ({H_id}) because it hasn't been accessed since {delta}",
+                    )
                 )
                 histogrammer.hists_last_access.pop(H_id, None)
                 histogrammer.hists.pop(H_id, None)
 
         # check freq: 5min (todo: make it configurable)
         await asyncio.sleep(60 * 5)
+
+
+# Callback: log every n seconds how much memory the hists on the server use
+async def print_hists_stats(histogrammer: Histogrammer) -> None:
+    while True:
+        if histogrammer.hists:
+            nbytes = 0
+            nhists = len(histogrammer.hists)
+            for H in histogrammer.hists.values():
+                nbytes += H.view(True).nbytes
+
+            logger.info(
+                fmt_callback_logger_msg(
+                    callback_method="print_hists_stats",
+                    msg=f"using {bytes_repr(nbytes)} with {nhists} hists",
+                )
+            )
+
+        # check freq: 5s (todo: make it configurable)
+        await asyncio.sleep(5)
 
 
 class Server:
@@ -220,9 +257,13 @@ class Server:
 
         # add callbacks:
         # - prune hists that haven't been filled/snapshotted/etc since more than 1 day (todo: make it configurable)
+        # - print hists stats to understand current memory usage
         self._callbacks = [
             asyncio.create_task(
                 prune_old_hists(histogrammer=histogrammer, delta=timedelta(days=1))
+            ),
+            asyncio.create_task(
+                print_hists_stats(histogrammer=histogrammer),
             ),
         ]
 
@@ -240,7 +281,7 @@ class Server:
     async def start(self) -> None:
         await self.server.start()
         logger.info(
-            f"Histogram server started, listening on {self.address} with {self.n_threads} threads"
+            f"started - listening on {self.address} with {self.n_threads} threads"
         )
 
     async def stop(self, grace: float | None = None) -> None:

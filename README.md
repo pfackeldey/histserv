@@ -14,15 +14,79 @@ pip install histserv
 conda install -c conda-forge histserv
 ```
 
-## Example
-
-See `example/`.
+## Quickstart
 
 Start gRPC server (or just `./example/start_server.sh`):
 ```shell
 histserv --port 50051 --n-threads 4
-# INFO:histserv:Histogram server started, listening on [::]:50051 with 4 threads
+# INFO:histserv:started - listening on [::]:50051 with 4 threads
 ```
+
+Then run:
+```python
+from hist import Hist
+from histserv import Client
+import numpy as np
+
+
+# initialize hist locally
+H_local = Hist.new.Reg(30, -3, 3, name="x", label="x-axis").Double()
+
+with Client(address="[::]:50051") as client:
+    # initialize it on the server and receive a 'remote_hist' to interact with it
+    H_remote = client.init(H_local)
+    # fill it on the server
+    H_remote.fill(x=np.random.normal(size=1000))
+    # retrieve it back, drop it from the server, print it
+    print(H_remote.snapshot(drop_from_server=True))
+
+
+# local hist hasn't been filled
+assert np.all(H_local.view(True) == 0)
+```
+
+Output in ipython:
+```shell
+┌────────────────────────────────────────────────────────────────────────────┐
+[-inf,   -3) 1  │▋                                                           │
+[  -3, -2.8) 0  │                                                            │
+[-2.8, -2.6) 1  │▋                                                           │
+[-2.6, -2.4) 1  │▋                                                           │
+[-2.4, -2.2) 6  │████                                                        │
+[-2.2,   -2) 11 │███████▍                                                    │
+[  -2, -1.8) 12 │████████                                                    │
+[-1.8, -1.6) 20 │█████████████▍                                              │
+[-1.6, -1.4) 19 │████████████▊                                               │
+[-1.4, -1.2) 33 │██████████████████████▏                                     │
+[-1.2,   -1) 50 │█████████████████████████████████▌                          │
+[  -1, -0.8) 70 │██████████████████████████████████████████████▉             │
+[-0.8, -0.6) 49 │████████████████████████████████▉                           │
+[-0.6, -0.4) 88 │███████████████████████████████████████████████████████████ │
+[-0.4, -0.2) 63 │██████████████████████████████████████████▎                 │
+[-0.2,    0) 65 │███████████████████████████████████████████▋                │
+[   0,  0.2) 85 │█████████████████████████████████████████████████████████   │
+[ 0.2,  0.4) 77 │███████████████████████████████████████████████████▋        │
+[ 0.4,  0.6) 65 │███████████████████████████████████████████▋                │
+[ 0.6,  0.8) 61 │████████████████████████████████████████▉                   │
+[ 0.8,    1) 63 │██████████████████████████████████████████▎                 │
+[   1,  1.2) 45 │██████████████████████████████▏                             │
+[ 1.2,  1.4) 36 │████████████████████████▏                                   │
+[ 1.4,  1.6) 32 │█████████████████████▌                                      │
+[ 1.6,  1.8) 15 │██████████                                                  │
+[ 1.8,    2) 11 │███████▍                                                    │
+[   2,  2.2) 10 │██████▊                                                     │
+[ 2.2,  2.4) 3  │██                                                          │
+[ 2.4,  2.6) 5  │███▍                                                        │
+[ 2.6,  2.8) 2  │█▍                                                          │
+[ 2.8,    3) 1  │▋                                                           │
+[   3,  inf) 0  │                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+
+## Examples
+
+See `example/` for more examples.
 
 Run example client:
 ```shell
@@ -41,12 +105,12 @@ python example/client.py
 
 And the server logs additionally (after running the client script):
 ```shell
-# INFO:histserv:Initialized histogram (52c77c93da8146f2a72c53af269d1ab5)
-# INFO:histserv:Filled histogram (52c77c93da8146f2a72c53af269d1ab5) with 24,000,000 bytes
-# INFO:histserv:Created snapshot of histogram (52c77c93da8146f2a72c53af269d1ab5)
-# INFO:histserv:Filled histogram (52c77c93da8146f2a72c53af269d1ab5) with 24,000,000 bytes
-# INFO:histserv:Filled histogram (52c77c93da8146f2a72c53af269d1ab5) with 24,000,000 bytes
-# INFO:histserv:Flushed histogram (52c77c93da8146f2a72c53af269d1ab5) to hist.h5
+# INFO:histserv:RPC<Init> (hist_id=52c77c93da8146f2a72c53af269d1ab5) - initialized histogram
+# INFO:histserv:RPC<Fill> (hist_id=52c77c93da8146f2a72c53af269d1ab5) - filled with 24.00 MB
+# INFO:histserv:RPC<SnapShot> (hist_id=52c77c93da8146f2a72c53af269d1ab5) - created snapshot
+# INFO:histserv:RPC<Fill> (hist_id=52c77c93da8146f2a72c53af269d1ab5) - filled with 24.00 MB
+# INFO:histserv:RPC<Fill> (hist_id=52c77c93da8146f2a72c53af269d1ab5) - filled with 24.00 MB
+# INFO:histserv:RPC<Flush> (hist_id=52c77c93da8146f2a72c53af269d1ab5) - flushed histogram to hist.h5
 ```
 
 Or check out how to use remote histogram filling with an example coffea Processor in `example/coffea_processor.py`.
