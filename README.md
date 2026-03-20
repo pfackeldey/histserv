@@ -33,11 +33,11 @@ import numpy as np
 H_local = Hist.new.Reg(30, -3, 3, name="x", label="x-axis").Double()
 
 with Client(address="[::]:50051") as client:
-    # initialize it on the server and receive a 'remote_hist' to interact with it
+    # initialize it on the server and receive a remote hist to interact with it
     H_remote = client.init(H_local)
-    # fill it on the server
+    # fill the remote hist on the server
     H_remote.fill(x=np.random.normal(size=1000))
-    # retrieve it back, drop it from the server, print it
+    # retrieve it back, drop it from the server & print it
     print(H_remote.snapshot(drop_from_server=True))
 
 
