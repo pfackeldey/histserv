@@ -36,16 +36,19 @@ def serialize_nparray(item: np.ndarray | list | tuple) -> hist_pb2.Ndarray:
 def serialize(item: tp.Any) -> hist_pb2.Value:
     """Serialize something into a hist_pb2.Value message."""
     msg = hist_pb2.Value()
-    if isinstance(item, (np.ndarray, list, tuple)):  # do we need to handle more types?
-        msg.array_value.CopyFrom(serialize_nparray(item))
-    elif isinstance(item, str):
-        msg.string_value = item
-    elif isinstance(item, int):
-        msg.int_value = item
-    elif isinstance(item, bool):
-        msg.bool_value = item
-    else:
-        raise TypeError(f"Can't serialize: {item}")
+    match item:
+        case str():  # StrCategory axis
+            msg.string_value = item
+        case int():  # IntCategory axis
+            msg.int_value = item
+        case bool():  # Boolean axis
+            msg.bool_value = item
+        # all other axes: Integer, Regular, Variable (can this also be Boolean?)
+        case _:
+            try:
+                msg.array_value.CopyFrom(serialize_nparray(item))
+            except Exception as e:
+                raise TypeError(f"Can't serialize: {item=} ({type(item)=})") from e
     return msg
 
 
@@ -61,7 +64,7 @@ def _numpy_dtype_to_proto_dtype(np_dtype: np.dtype) -> hist_pb2.Dtype:
         case np.int64:
             return hist_pb2.Dtype(type=hist_pb2.Dtype.TYPE_DT_INT64)
         case _:
-            raise ValueError(f"Unsupported numpy dtype: {np_dtype}")
+            raise ValueError(f"Unsupported numpy dtype: {np_dtype=}")
 
 
 def deserialize(message: hist_pb2.Value):
@@ -87,7 +90,7 @@ def deserialize(message: hist_pb2.Value):
         case "bool_value":
             return message.bool_value
         case _:
-            raise ValueError("Unsupported Value type")
+            raise ValueError(f"Unsupported Value type, got {message=}")
 
 
 def _proto_dtype_to_numpy_dtype(proto_dtype: hist_pb2.Dtype):
