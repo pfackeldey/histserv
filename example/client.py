@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import grpc
 import hist
 import numpy as np
 
@@ -18,46 +19,50 @@ H = hist.Hist(
 
 
 if __name__ == "__main__":
-    # connect to remote HistServ gRPC server
-    with Client(address="[::]:50051") as client:
-        # initialize it on the server and receive a 'remote_hist' to interact with it
-        remote_hist = client.init(H)
+    try:
+        # connect to remote HistServ gRPC server
+        with Client(address="[::]:50051") as client:
+            # initialize it on the server and receive a 'remote_hist' to interact with it
+            remote_hist = client.init(H)
 
-        print("Remote hist initialized:", remote_hist)
+            print("Remote hist initialized:", remote_hist)
 
-        # fill histogram remotely (blocking operation)
-        response = remote_hist.fill(
-            x=np.random.normal(size=1_000_000).astype(np.float64),
-            y=np.random.normal(size=1_000_000).astype(np.float64),
-            dataset="data",
-            weight=np.ones(1_000_000, dtype=np.float64),
-        )
-        print(f"Remote hist filled successfully? -> {response.success}")
+            # fill histogram remotely (blocking operation)
+            remote_hist.fill(
+                x=np.random.normal(size=1_000_000).astype(np.float64),
+                y=np.random.normal(size=1_000_000).astype(np.float64),
+                dataset="data",
+                weight=np.ones(1_000_000, dtype=np.float64),
+            )
+            print("Remote hist fill succeeded.")
 
-        # Creating a snapshot means to return the current state of the remote_hist to the client
-        # The `drop_from_server` option allows to remove the histogram from the server's memory if set to True
-        print(
-            "Snapshotting current hist:", remote_hist.snapshot(drop_from_server=False)
-        )
+            # Creating a snapshot means to return the current state of the remote_hist to the client
+            # The `delete_from_server` option allows to remove the histogram from the server's memory if set to True
+            print(
+                "Snapshotting current hist:",
+                remote_hist.snapshot(delete_from_server=False),
+            )
 
-        # fill histogram remotely again with different dataset
-        response = remote_hist.fill(
-            x=np.random.normal(size=1_000_000).astype(np.float64),
-            y=np.random.normal(size=1_000_000).astype(np.float64),
-            dataset="drell-yan",
-            weight=np.ones(1_000_000, dtype=np.float64),
-        )
-        print(f"Remote hist filled successfully? -> {response.success}")
+            # fill histogram remotely again with different dataset
+            remote_hist.fill(
+                x=np.random.normal(size=1_000_000).astype(np.float64),
+                y=np.random.normal(size=1_000_000).astype(np.float64),
+                dataset="drell-yan",
+                weight=np.ones(1_000_000, dtype=np.float64),
+            )
+            print("Remote hist fill succeeded.")
 
-        # fill histogram remotely again with different dataset (something that triggers axis growth)
-        response = remote_hist.fill(
-            x=np.random.normal(size=1_000_000).astype(np.float64),
-            y=np.random.normal(size=1_000_000).astype(np.float64),
-            dataset="ttbar",
-            weight=np.ones(1_000_000, dtype=np.float64),
-        )
-        print(f"Remote hist filled successfully? -> {response.success}")
+            # fill histogram remotely again with different dataset (something that triggers axis growth)
+            remote_hist.fill(
+                x=np.random.normal(size=1_000_000).astype(np.float64),
+                y=np.random.normal(size=1_000_000).astype(np.float64),
+                dataset="ttbar",
+                weight=np.ones(1_000_000, dtype=np.float64),
+            )
+            print("Remote hist fill succeeded.")
 
-        # flush histogram remotely to file
-        response = remote_hist.flush(destination="hist.h5")
-        print(f"Remote hist flushed succesfully? -> {response.message}")
+            # flush histogram remotely to file
+            remote_hist.flush(destination="hist.h5")
+            print("Remote hist flushed successfully to hist.h5.")
+    except grpc.RpcError as exc:
+        print(f"RPC failed: {exc.code()} - {exc.details()}")

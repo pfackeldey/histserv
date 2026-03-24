@@ -1,4 +1,5 @@
 import hist
+import grpc
 from histserv import Client
 
 
@@ -24,14 +25,17 @@ class Processor:
         import numpy as np
 
         for _ in range(4):
-            ret = self.remote_hist.fill(
-                x=np.random.normal(size=1_000_000).astype(np.float64),
-                y=np.random.normal(size=1_000_000).astype(np.float64),
-                dataset="data",
-                weight=np.ones(1_000_000, dtype=np.float64),
-            )
-            if not ret.success:
-                raise ValueError(ret.message)
+            try:
+                self.remote_hist.fill(
+                    x=np.random.normal(size=1_000_000).astype(np.float64),
+                    y=np.random.normal(size=1_000_000).astype(np.float64),
+                    dataset="data",
+                    weight=np.ones(1_000_000, dtype=np.float64),
+                )
+            except grpc.RpcError as exc:
+                raise RuntimeError(
+                    f"RPC failed with status {exc.code()}: {exc.details()}"
+                ) from exc
 
         print("All remote fills succeeded!")
 

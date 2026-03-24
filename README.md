@@ -38,7 +38,7 @@ with Client(address="[::]:50051") as client:
     # fill the remote hist on the server
     H_remote.fill(x=np.random.normal(size=1000))
     # retrieve it back, drop it from the server & print it
-    print(H_remote.snapshot(drop_from_server=True))
+    print(H_remote.snapshot(delete_from_server=True))
 
 
 # local hist hasn't been filled
@@ -92,25 +92,25 @@ Run example client:
 ```shell
 python example/client.py
 # Remote hist initialized: RemoteHist<ID=52c77c93da8146f2a72c53af269d1ab5 @[::]:50051>
-# Remote hist filled successfully? -> True
+# Remote hist fill succeeded.
 # Snapshotting current hist: Hist(
 #   Regular(10, -2, 2, name='x', label='X Axis'),
 #   Regular(10, -2, 2, name='y', label='Y Axis'),
 #   StrCategory(['data', 'drell-yan'], growth=True, name='dataset', label='Dataset'),
 #   storage=Weight()) # Sum: WeightedSum(value=911503, variance=911503) (WeightedSum(value=1e+06, variance=1e+06) with flow)
-# Remote hist filled successfully? -> True
-# Remote hist filled successfully? -> True
-# Remote hist flushed succesfully? -> Histogram (52c77c93da8146f2a72c53af269d1ab5) flushed successfully to hist.h5.
+# Remote hist fill succeeded.
+# Remote hist fill succeeded.
+# Remote hist flushed successfully to hist.h5.
 ```
 
 And the server logs additionally (after running the client script):
 ```shell
-# INFO:histserv:RPC<Init> (hist_id=52c77c93da8146f2a72c53af269d1ab5) - initialized histogram
-# INFO:histserv:RPC<Fill> (hist_id=52c77c93da8146f2a72c53af269d1ab5) - filled with 24.00 MB
-# INFO:histserv:RPC<SnapShot> (hist_id=52c77c93da8146f2a72c53af269d1ab5) - created snapshot
-# INFO:histserv:RPC<Fill> (hist_id=52c77c93da8146f2a72c53af269d1ab5) - filled with 24.00 MB
-# INFO:histserv:RPC<Fill> (hist_id=52c77c93da8146f2a72c53af269d1ab5) - filled with 24.00 MB
-# INFO:histserv:RPC<Flush> (hist_id=52c77c93da8146f2a72c53af269d1ab5) - flushed histogram to hist.h5
+# INFO:histserv:RPC<Init> - initialized histogram (hist_id=52c77c93da8146f2a72c53af269d1ab5)
+# INFO:histserv:RPC<Fill> - filled with 24.00 MB (hist_id=52c77c93da8146f2a72c53af269d1ab5)
+# INFO:histserv:RPC<Snapshot> - created snapshot (hist_id=52c77c93da8146f2a72c53af269d1ab5)
+# INFO:histserv:RPC<Fill> - filled with 24.00 MB (hist_id=52c77c93da8146f2a72c53af269d1ab5)
+# INFO:histserv:RPC<Fill> - filled with 24.00 MB (hist_id=52c77c93da8146f2a72c53af269d1ab5)
+# INFO:histserv:RPC<Flush> - flushed histogram to hist.h5 (hist_id=52c77c93da8146f2a72c53af269d1ab5)
 ```
 
 Or check out how to use remote histogram filling with an example coffea Processor in `example/coffea_processor.py`.
@@ -131,6 +131,12 @@ Axis support:
 - `np.int64`
 - `np.int32`
 
+## Stats RPC
+
+The server exposes a lightweight `Stats` RPC for point-in-time introspection.
+
+- `client.stats()` returns global stats
+- `client.stats(token="alice")` returns stats scoped to histograms owned by token `alice`
 
 ## Developer Info
 

@@ -57,6 +57,7 @@ Discussions = "https://github.com/pfackeldey/histserv/discussions"
 dev = [
     "ipython",
     "h5py", # needed only for the `.flush` RPC call on the server
+    "pytest>=8.0.0",
 ]
 
 [project.scripts]
@@ -64,3 +65,24 @@ histserv = "histserv.__main__:run"
 
 [tool.hatch]
 version.path = "src/histserv/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/example",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/histserv"]
+exclude = [
+    "/example",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ty.src]
+exclude = [
+    "src/histserv/protos/*",
+    "example/*",
+    "tests/*",
+]

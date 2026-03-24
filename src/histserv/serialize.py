@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
 import typing as tp
 
 import numcodecs
 import numpy as np
+import uhi.io.json
+from hist import Hist
+import hist.serialization  # noqa: F401
 
 from histserv.protos import hist_pb2
 
@@ -19,6 +23,23 @@ codec = numcodecs.Blosc(cname="zstd", clevel=1, shuffle=numcodecs.Blosc.BITSHUFF
 
 
 def serialize_nparray(item: np.ndarray | list | tuple) -> hist_pb2.Ndarray:
+    """Serialize an array-like object into a protobuf ndarray message.
+
+    Args:
+        item: Numpy array or array-like input to encode.
+
+    Returns:
+        hist_pb2.Ndarray: Protobuf message containing shape, dtype, and encoded
+            byte content.
+
+    Raises:
+        ValueError: If the numpy dtype cannot be represented in protobuf.
+
+    Example:
+        >>> msg = serialize_nparray(np.array([1.0, 2.0], dtype=np.float32))
+        >>> list(msg.shape)
+        [2]
+    """
     item = np.ascontiguousarray(item)
 
     shape = list(item.shape)
@@ -33,8 +54,25 @@ def serialize_nparray(item: np.ndarray | list | tuple) -> hist_pb2.Ndarray:
     return hist_pb2.Ndarray(shape=shape, dtype=dtype, data=compressed_data)
 
 
-def serialize(item: tp.Any) -> hist_pb2.Value:
-    """Serialize something into a hist_pb2.Value message."""
+def serialize_proto_Value(item: tp.Any) -> hist_pb2.Value:
+    """Serialize a scalar or array-like object into a protobuf value message.
+
+    Args:
+        item: Supported input value, such as a string, integer, boolean, numpy
+            array, or array-like object.
+
+    Returns:
+        hist_pb2.Value: Protobuf wrapper containing the serialized value.
+
+    Raises:
+        TypeError: If the value cannot be serialized into one of the supported
+            protobuf variants.
+
+    Example:
+        >>> msg = serialize_proto_Value(np.array([1, 2, 3], dtype=np.int32))
+        >>> msg.WhichOneof("value")
+        'array_value'
+    """
     msg = hist_pb2.Value()
     match item:
         case str():  # StrCategory axis
@@ -67,8 +105,23 @@ def _numpy_dtype_to_proto_dtype(np_dtype: np.dtype) -> hist_pb2.Dtype:
             raise ValueError(f"Unsupported numpy dtype: {np_dtype=}")
 
 
-def deserialize(message: hist_pb2.Value):
-    """Deserialize a hist_pb2.Value message into a numpy ndarray, str or int."""
+def deserialize_proto_Value(message: hist_pb2.Value):
+    """Deserialize a protobuf value message into a Python object.
+
+    Args:
+        message: Protobuf value message produced by `serialize_proto_Value`.
+
+    Returns:
+        tp.Any: Deserialized numpy array, string, integer, or boolean value.
+
+    Raises:
+        ValueError: If the protobuf payload contains an unsupported variant.
+
+    Example:
+        >>> value = deserialize_proto_Value(serialize_proto_Value(True))
+        >>> value
+        True
+    """
     match message.WhichOneof("value"):
         case "array_value":
             ndarray = message.array_value
@@ -106,3 +159,58 @@ def _proto_dtype_to_numpy_dtype(proto_dtype: hist_pb2.Dtype):
             return np.int64
         case _:
             raise ValueError(f"Unsupported proto dtype: {proto_dtype.type}")
+
+
+def serialize_hist(h: Hist) -> tuple[str, dict[str, hist_pb2.Value]]:
+    """Serialize a histogram into metadata JSON and protobuf content fields.
+
+    Args:
+        h: Histogram to serialize.
+
+    Returns:
+        tuple[str, dict[str, hist_pb2.Value]]: JSON metadata and serialized
+            storage payload keyed by storage field name.
+
+    Example:
+        >>> import hist
+        >>> h = hist.Hist(hist.axis.Regular(4, 0, 1, name="x"))
+        >>> metadata, contents = serialize_hist(h)
+        >>> isinstance(metadata, str) and isinstance(contents, dict)
+        True
+    """
+    # serialize
+    hist_ser = hist.serialization.to_uhi(h)
+    storage = hist_ser.pop("storage")
+    # recover type
+    hist_ser["storage"] = {"type": storage.pop("type")}
+    # serialize all contents
+    data_ser = {k: serialize_proto_Value(v) for k, v in storage.items()}
+    return json.dumps(hist_ser, default=uhi.io.json.default), data_ser
+
+
+def deserialize_hist(metadata: str, contents: dict[str, hist_pb2.Value]) -> Hist:
+    """Reconstruct a histogram from metadata JSON and serialized contents.
+
+    Args:
+        metadata: Histogram metadata JSON produced by `serialize_hist`.
+        contents: Serialized storage payload produced by `serialize_hist`.
+
+    Returns:
+        Hist: Reconstructed histogram instance.
+
+    Example:
+        >>> import hist
+        >>> h = hist.Hist(hist.axis.Regular(4, 0, 1, name="x"))
+        >>> metadata, contents = serialize_hist(h)
+        >>> restored = deserialize_hist(metadata, contents)
+        >>> isinstance(restored, Hist)
+        True
+    """
+    # load hist metadata (axes & storage type)
+    hist_json = json.loads(metadata)
+    # deserialize the content arrays from protobuf Value
+    content = {k: deserialize_proto_Value(v) for k, v in contents.items()}
+    # reconstruct the full hist json serialization
+    hist_json["storage"].update(content)
+    # instantiate a new hist
+    return Hist(hist_json)

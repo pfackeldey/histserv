@@ -1,15 +1,23 @@
 syntax = "proto3";
 
+import "google/protobuf/timestamp.proto";
+
 // The histogram service definition.
 service HistogrammerService {
   // Sends a histogram initialization request
   rpc Init(InitRequest) returns (InitResponse) {}
+  // Checks whether a histogram exists and is accessible
+  rpc Exists(ExistsRequest) returns (ExistsResponse) {}
   // Sends a filling request
   rpc Fill(FillRequest) returns (FillResponse) {}
   // Sends a snapshot request of the current histogram
-  rpc SnapShot(SnapShotRequest) returns (SnapShotResponse) {}
+  rpc Snapshot(SnapshotRequest) returns (SnapshotResponse) {}
+  // Deletes a histogram from the server
+  rpc Delete(DeleteRequest) returns (DeleteResponse) {}
   // Sends a flushing request (to disk)
   rpc Flush(FlushRequest) returns (FlushResponse) {}
+  // Returns a point-in-time snapshot of server stats
+  rpc Stats(StatsRequest) returns (StatsResponse) {}
 }
 
 // This request sends JSON payload to initialize the histogram on the server
@@ -19,8 +27,15 @@ message InitRequest {
 
 // The response message
 message InitResponse {
-  bool success = 1; // indicates if the operation was successful
-  string message = 2; // additional information or error message
+  string hist_id = 1;
+}
+
+message ExistsRequest {
+  string hist_id = 1;
+}
+
+message ExistsResponse {
+  bool exists = 1;
 }
 
 // The request message containing the values to fill the histogram.
@@ -30,27 +45,25 @@ message FillRequest {
   map<string, Value> kwargs = 2;
 }
 
-// The response messages
-message FillResponse {
-  bool success = 1; // indicates if the operation was successful
-  string message = 2; // additional information or error message
-}
+message FillResponse {}
 
 // This request sends JSON payload to initialize the histogram on the server
-message SnapShotRequest {
+message SnapshotRequest {
   string hist_id = 1;
-  bool drop_from_server = 2;
+  bool delete_from_server = 2;
 }
 
 // The response message
-message SnapShotResponse {
-  bool success = 1; // indicates if the operation was successful
-  string message = 2; // additional information or error message
-
-  // this can only be returned is success is True
-  string hist_json = 3;
-  map<string, Value> data = 4;
+message SnapshotResponse {
+  string hist_json = 1;
+  map<string, Value> data = 2;
 }
+
+message DeleteRequest {
+  string hist_id = 1;
+}
+
+message DeleteResponse {}
 
 // The request message for flushing the histogram.
 message FlushRequest {
@@ -58,10 +71,27 @@ message FlushRequest {
   string destination = 2; // where to flush the histogram data
 }
 
-// is there a better way to re-use the result messages?
-message FlushResponse {
-  bool success = 1; // indicates if the operation was successful
-  string message = 2; // additional information or error message
+message FlushResponse {}
+
+message StatsRequest {}
+
+message StatsResponse {
+  uint64 histogram_count = 1;
+  uint64 histogram_bytes = 2;
+  uint64 active_rpcs = 3;
+  string version = 4;
+  uint64 uptime_seconds = 5;
+  double user_cpu_seconds = 6;
+  double system_cpu_seconds = 7;
+  map<string, uint64> rpc_calls_total = 8;
+  google.protobuf.Timestamp observed_at = 9;
+  TokenScopedStats token_scoped = 10;
+}
+
+message TokenScopedStats {
+  uint64 histogram_count = 1;
+  uint64 histogram_bytes = 2;
+  map<string, uint64> rpc_calls_total = 3;
 }
 
 // Data type representation (just a small subset for now)

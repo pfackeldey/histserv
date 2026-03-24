@@ -1,19 +1,43 @@
 from __future__ import annotations
 
-import logging
+import json
 import typing as tp
+from datetime import datetime
 from functools import cached_property
+from typing import TypedDict
 
 import grpc
-from hist import Hist
-import json
 import uhi.io.json
+from hist import Hist
+from hist.axis import NamedAxesTuple
 
 from histserv.protos import hist_pb2, hist_pb2_grpc
-from histserv.serialize import serialize, deserialize
+from histserv.serialize import (
+    deserialize_hist,
+    serialize_proto_Value,
+)
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
+class TokenScopedStatsDict(TypedDict):
+    histogram_count: int
+    histogram_bytes: int
+    rpc_calls_total: dict[str, int]
+
+
+class _StatsBaseDict(TypedDict):
+    histogram_count: int
+    histogram_bytes: int
+    active_rpcs: int
+    version: str
+    uptime_seconds: int
+    user_cpu_seconds: float
+    system_cpu_seconds: float
+    rpc_calls_total: dict[str, int]
+    observed_at: datetime
+
+
+class StatsDict(_StatsBaseDict, total=False):
+    token_scoped: dict[str, TokenScopedStatsDict]
 
 
 class Client:
@@ -36,7 +60,6 @@ class Client:
     def channel(self) -> grpc.Channel:
         return grpc.insecure_channel(
             self.address,
-            # compression=grpc.Compression.Gzip,
             compression=grpc.Compression.NoCompression,  # turn off for now, we compress with numcodecs the byte buffer
             options=[
                 ("grpc.max_send_message_length", 1 << 29),
@@ -47,29 +70,169 @@ class Client:
     def stub(self) -> hist_pb2_grpc.HistogrammerServiceStub:
         return hist_pb2_grpc.HistogrammerServiceStub(self.channel)
 
-    def init(self, hist: Hist, *, timeout: int = 10) -> RemoteHist:
+    @staticmethod
+    def _metadata(token: str | None) -> tuple[tuple[str, str], ...] | None:
+        if token is None:
+            return None
+        return (("x-histserv-token", token),)
+
+    def init(
+        self, hist: Hist, *, token: str | None = None, timeout: int = 10
+    ) -> RemoteHist:
+        """Register a histogram on the server and return a remote handle.
+
+        Args:
+            hist: Histogram metadata used to initialize remote storage.
+            token: Optional token used to scope ownership of the remote
+                histogram.
+            timeout: RPC timeout in seconds.
+
+        Returns:
+            RemoteHist: Handle for filling and retrieving the remote histogram.
+
+        Raises:
+            ValueError: If `hist` is not a `hist.Hist` or has unnamed axes.
+            grpc.RpcError: If the server rejects initialization.
+
+        Example:
+            >>> import hist
+            >>> h = hist.Hist(hist.axis.Regular(10, 0, 1, name="x"))
+            >>> client = Client("localhost:50051")
+            >>> remote = client.init(h, token="alice", timeout=5)
+            >>> remote.fill(x=0.25, timeout=5)  # reuses token="alice"
+        """
         if not isinstance(hist, Hist):
             raise ValueError(f"`hist` must of type `hist.Hist`, got {type(hist)=}")
+        if not all(ax.name for ax in hist.axes):
+            raise ValueError(
+                "`hist` must have names for every axis, because `histserv` only supports filling with kwargs currently"
+            )
+        assert isinstance(hist.axes, NamedAxesTuple)
 
         # TODO: replace with metadata only serialization once this is resolved:
         # https://github.com/scikit-hep/boost-histogram/issues/1089
         json_obj = json.dumps(hist, default=uhi.io.json.default)
         request = hist_pb2.InitRequest(hist_json=json_obj)
-
-        ret = self.stub.Init(request, timeout=timeout)
-        if not ret.success:
-            raise ValueError(ret.message)
+        ret = self.stub.Init(
+            request,
+            timeout=timeout,
+            metadata=self._metadata(token),
+        )
 
         # create a remote hist that one can interact with
-        return RemoteHist(client=self, hist_id=ret.message)
+        return RemoteHist(
+            client=self,
+            hist_id=ret.hist_id,
+            token=token,
+        )
+
+    def connect(self, hist_id: str, *, token: str | None = None) -> RemoteHist:
+        """Create a handle for an already-existing remote histogram.
+
+        This does not contact the server. It only reconstructs a `RemoteHist`
+        from a known histogram id and optional token.
+
+        Args:
+            hist_id: Identifier of an existing remote histogram.
+            token: Optional token required to access token-scoped histograms.
+
+        Returns:
+            RemoteHist: Handle for interacting with the existing remote
+                histogram.
+
+        Example:
+            >>> client = Client("localhost:50051")
+            >>> remote = client.connect("abc123", token="alice")
+            >>> remote.snapshot(timeout=5)
+        """
+        return RemoteHist(
+            client=self,
+            hist_id=hist_id,
+            token=token,
+        )
+
+    def stats(
+        self,
+        *,
+        token: str | None = None,
+        timeout: int = 10,
+    ) -> StatsDict:
+        """Fetch a point-in-time snapshot of server statistics.
+
+        Args:
+            token: Optional token used to extend the global stats with
+                token-scoped counters and histogram data for that token.
+            timeout: RPC timeout in seconds.
+
+        Returns:
+            dict: Parsed global server statistics. If a token is provided, the
+                result also includes a `"token_scoped"` entry for that token.
+                CPU counters always stay global process counters.
+
+        Example:
+            >>> client = Client("localhost:50051")
+            >>> first = client.stats(token="alice", timeout=5)
+            >>> second = client.stats(token="alice", timeout=5)
+            >>> wall = (second["observed_at"] - first["observed_at"]).total_seconds()
+            >>> cpu = (
+            ...     (second["user_cpu_seconds"] + second["system_cpu_seconds"])
+            ...     - (first["user_cpu_seconds"] + first["system_cpu_seconds"])
+            ... )
+            >>> fills = (
+            ...     second["token_scoped"]["alice"]["rpc_calls_total"].get("Fill", 0)
+            ...     - first["token_scoped"]["alice"]["rpc_calls_total"].get("Fill", 0)
+            ... )
+            >>> fills_per_cpu_second = fills / cpu if cpu > 0 else float("inf")
+            >>> average_cpu_cores = cpu / wall if wall > 0 else 0.0
+        """
+        request = hist_pb2.StatsRequest()
+        response = self.stub.Stats(
+            request,
+            timeout=timeout,
+            metadata=self._metadata(token),
+        )
+        stats: StatsDict = {
+            "histogram_count": response.histogram_count,
+            "histogram_bytes": response.histogram_bytes,
+            "active_rpcs": response.active_rpcs,
+            "version": response.version,
+            "uptime_seconds": response.uptime_seconds,
+            "user_cpu_seconds": response.user_cpu_seconds,
+            "system_cpu_seconds": response.system_cpu_seconds,
+            "rpc_calls_total": dict(response.rpc_calls_total),
+            "observed_at": response.observed_at.ToDatetime(),
+        }
+        if token is not None and response.HasField("token_scoped"):
+            stats["token_scoped"] = {
+                token: {
+                    "histogram_count": response.token_scoped.histogram_count,
+                    "histogram_bytes": response.token_scoped.histogram_bytes,
+                    "rpc_calls_total": dict(response.token_scoped.rpc_calls_total),
+                }
+            }
+        return stats
 
 
 class RemoteHist:
-    __slots__ = ("_client", "_hist_id")
+    """Client-side handle for an existing remote histogram.
 
-    def __init__(self, client: Client, hist_id: str) -> None:
+    Example:
+        >>> client = Client("localhost:50051")
+        >>> remote = client.connect("abc123", token="alice")
+        >>> remote.snapshot(timeout=5)
+    """
+
+    __slots__ = ("_client", "_hist_id", "_token")
+
+    def __init__(
+        self,
+        client: Client,
+        hist_id: str,
+        token: str | None = None,
+    ) -> None:
         self._client = client
         self._hist_id = hist_id
+        self._token = token
 
     @property
     def client(self) -> Client:
@@ -79,31 +242,176 @@ class RemoteHist:
     def hist_id(self) -> str:
         return self._hist_id
 
+    @property
+    def token(self) -> str | None:
+        return self._token
+
+    def _metadata(self) -> tuple[tuple[str, str], ...] | None:
+        return self.client._metadata(self.token)
+
     def __repr__(self) -> str:
-        return f"RemoteHist<ID={self.hist_id} @{self.client.address}>"
+        return (
+            "RemoteHist("
+            f"hist_id={self.hist_id!r}, "
+            f"address={self.client.address!r}, "
+            f"token={self.token!r}"
+            ")"
+        )
+
+    def get_connection_info(self) -> dict[str, str | None]:
+        """Return the information needed to reconnect to this remote histogram.
+
+        The returned dictionary is suitable for passing back into
+        ``Client.connect(...)``. It can also be serialized and stored between
+        Python sessions.
+
+        Returns:
+            dict[str, str | None]: Connection information containing the
+                remote histogram id and bound token.
+
+        Example:
+            >>> connection_info = remote.get_connection_info()
+            >>> remote_reconnected = client.connect(**connection_info)
+
+        Example:
+            >>> import json
+            >>> connection_info = remote.get_connection_info()
+            >>> payload = json.dumps(connection_info)
+            >>> restored = json.loads(payload)
+            >>> remote_reconnected = client.connect(**restored)
+        """
+        return {
+            "hist_id": self.hist_id,
+            "token": self.token,
+        }
 
     def fill(self, *, timeout: int = 10, **kwargs: tp.Any) -> hist_pb2.FillResponse:
-        serialized_kwargs = {key: serialize(value) for key, value in kwargs.items()}
+        """Fill the remote histogram by forwarding keyword arguments directly.
+
+        Args:
+            timeout: RPC timeout in seconds.
+            **kwargs: Axis values and optional weights or samples accepted by
+                `hist.Hist.fill`.
+
+        Returns:
+            hist_pb2.FillResponse: Empty response returned on success.
+
+        Example:
+            >>> response = remote.fill(x=0.25, timeout=5)
+            >>> isinstance(response, hist_pb2.FillResponse)
+            True
+        """
+        serialized_kwargs = {
+            key: serialize_proto_Value(value) for key, value in kwargs.items()
+        }
         request = hist_pb2.FillRequest(hist_id=self.hist_id, kwargs=serialized_kwargs)
-        return self.client.stub.Fill(request, timeout=timeout)
-
-    def snapshot(self, drop_from_server: bool = False, *, timeout: int = 10) -> Hist:
-        request = hist_pb2.SnapShotRequest(
-            hist_id=self.hist_id, drop_from_server=drop_from_server
+        return self.client.stub.Fill(
+            request,
+            timeout=timeout,
+            metadata=self._metadata(),
         )
-        ret = self.client.stub.SnapShot(request, timeout=timeout)
-        if not ret.success:
-            raise ValueError(ret.message)
 
-        hist_json = json.loads(ret.hist_json)
-        content_ser = ret.data
-        content = {k: deserialize(v) for k, v in content_ser.items()}
+    def exists(self, *, timeout: int = 10) -> bool:
+        """Check whether this remote histogram still exists on the server.
 
-        hist_json["storage"].update(content)
-        return Hist(hist_json)
+        Args:
+            timeout: RPC timeout in seconds.
+
+        Returns:
+            bool: `True` if the histogram exists and is accessible.
+
+        Example:
+            >>> remote.exists(timeout=5)
+            True
+        """
+        request = hist_pb2.ExistsRequest(hist_id=self.hist_id)
+        response = self.client.stub.Exists(
+            request,
+            timeout=timeout,
+            metadata=self._metadata(),
+        )
+        return response.exists
+
+    def snapshot(
+        self,
+        delete_from_server: bool = False,
+        *,
+        timeout: int = 10,
+    ) -> Hist:
+        """Fetch the current histogram contents from the server.
+
+        Args:
+            delete_from_server: Whether to remove the histogram from the server
+                after taking the snapshot.
+            timeout: RPC timeout in seconds.
+
+        Returns:
+            Hist: Local histogram reconstructed from server data.
+
+        Raises:
+            grpc.RpcError: If the server rejects the snapshot request.
+
+        Example:
+            >>> hist_obj = remote.snapshot(timeout=5)
+            >>> isinstance(hist_obj, Hist)
+            True
+        """
+        request = hist_pb2.SnapshotRequest(
+            hist_id=self.hist_id, delete_from_server=delete_from_server
+        )
+        ret = self.client.stub.Snapshot(
+            request,
+            timeout=timeout,
+            metadata=self._metadata(),
+        )
+
+        return deserialize_hist(metadata=ret.hist_json, contents=ret.data)
 
     def flush(
-        self, destination: str = "hist.h5", *, timeout: int = 10
+        self,
+        destination: str = "hist.h5",
+        *,
+        timeout: int = 10,
     ) -> hist_pb2.FlushResponse:
+        """Flush the remote histogram to a destination handled by the server.
+        ``.flush`` will always drop the histogram from the server.
+
+        Args:
+            destination: Output target interpreted by the server.
+            timeout: RPC timeout in seconds.
+
+        Returns:
+            hist_pb2.FlushResponse: Empty response returned on success.
+
+        Example:
+            >>> response = remote.flush("output.h5", timeout=5)
+            >>> isinstance(response, hist_pb2.FlushResponse)
+            True
+        """
         request = hist_pb2.FlushRequest(hist_id=self.hist_id, destination=destination)
-        return self.client.stub.Flush(request, timeout=timeout)
+        return self.client.stub.Flush(
+            request,
+            timeout=timeout,
+            metadata=self._metadata(),
+        )
+
+    def delete(self, *, timeout: int = 10) -> hist_pb2.DeleteResponse:
+        """Delete the remote histogram from the server.
+
+        Args:
+            timeout: RPC timeout in seconds.
+
+        Returns:
+            hist_pb2.DeleteResponse: Empty response returned on success.
+
+        Example:
+            >>> response = remote.delete(timeout=5)
+            >>> isinstance(response, hist_pb2.DeleteResponse)
+            True
+        """
+        request = hist_pb2.DeleteRequest(hist_id=self.hist_id)
+        return self.client.stub.Delete(
+            request,
+            timeout=timeout,
+            metadata=self._metadata(),
+        )
