@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import typing as tp
 
@@ -214,3 +215,17 @@ def deserialize_hist(metadata: str, contents: dict[str, hist_pb2.Value]) -> Hist
     hist_json["storage"].update(content)
     # instantiate a new hist
     return Hist(hist_json)
+
+
+def serialize_unique_id(unique_id: tp.Any) -> str:
+    """Serialize a `unique_id` into a string using SHA256.
+
+    Args:
+        unique_id: JSON serializable object
+
+    Returns:
+        str: hashed version of `unique_id`.
+    """
+    return hashlib.sha256(
+        json.dumps(unique_id, sort_keys=True).encode("utf-8")
+    ).hexdigest()

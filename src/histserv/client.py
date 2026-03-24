@@ -15,6 +15,7 @@ from histserv.protos import hist_pb2, hist_pb2_grpc
 from histserv.serialize import (
     deserialize_hist,
     serialize_proto_Value,
+    serialize_unique_id,
 )
 
 
@@ -285,11 +286,15 @@ class RemoteHist:
             "token": self.token,
         }
 
-    def fill(self, *, timeout: int = 10, **kwargs: tp.Any) -> hist_pb2.FillResponse:
+    def fill(
+        self, *, timeout: int = 10, unique_id: tp.Any | None = None, **kwargs: tp.Any
+    ) -> hist_pb2.FillResponse:
         """Fill the remote histogram by forwarding keyword arguments directly.
 
         Args:
             timeout: RPC timeout in seconds.
+            unique_id: if provided, any subsequent fill call with the same
+                `unique_id` will be rejected by the server.
             **kwargs: Axis values and optional weights or samples accepted by
                 `hist.Hist.fill`.
 
@@ -304,7 +309,17 @@ class RemoteHist:
         serialized_kwargs = {
             key: serialize_proto_Value(value) for key, value in kwargs.items()
         }
-        request = hist_pb2.FillRequest(hist_id=self.hist_id, kwargs=serialized_kwargs)
+        if unique_id is not None:
+            request = hist_pb2.FillRequest(
+                hist_id=self.hist_id,
+                unique_id=serialize_unique_id(unique_id),
+                kwargs=serialized_kwargs,
+            )
+        else:
+            request = hist_pb2.FillRequest(
+                hist_id=self.hist_id,
+                kwargs=serialized_kwargs,
+            )
         return self.client.stub.Fill(
             request,
             timeout=timeout,

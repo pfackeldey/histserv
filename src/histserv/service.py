@@ -116,6 +116,7 @@ class HistogramEntry:
     hist: hist.Hist
     token: str | None
     last_access: datetime
+    unique_ids: set[str]
 
 
 @dataclass(frozen=True)
@@ -280,6 +281,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 hist=hist_obj,
                 token=request_token,
                 last_access=datetime.now(timezone.utc),
+                unique_ids=set(),
             )
 
             logger.info(fmt_rpc_msg(msg="initialized histogram"))
@@ -318,6 +320,16 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 fmt_rpc_logger_msg, rpc_method=RPC_FILL, hist_id=hist_id
             )
 
+            entry = self._get_entry(hist_id=hist_id, request_token=request_token)
+            if entry is None:
+                error_msg = f"unknown histogram id: {hist_id}"
+                logger.warning(fmt_rpc_msg(msg=error_msg))
+                await context.abort(grpc.StatusCode.NOT_FOUND, error_msg)
+            assert entry is not None
+
+            if request.HasField("unique_id") and request.unique_id in entry.unique_ids:
+                error_msg = f"rejected fill of histogram id {hist_id}, because {request.unique_id=} already exists"
+                await context.abort(grpc.StatusCode.ALREADY_EXISTS, error_msg)
             try:
                 kwargs = {
                     key: deserialize_proto_Value(msg)
@@ -329,14 +341,10 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, error_msg)
 
             try:
-                entry = self._get_entry(hist_id=hist_id, request_token=request_token)
-                if entry is None:
-                    error_msg = f"unknown histogram id: {hist_id}"
-                    logger.warning(fmt_rpc_msg(msg=error_msg))
-                    await context.abort(grpc.StatusCode.NOT_FOUND, error_msg)
-                assert entry is not None
-
                 entry.hist.fill(**kwargs)
+
+                if request.HasField("unique_id"):
+                    entry.unique_ids.add(request.unique_id)
 
                 nbytes_filled = sum(
                     nd.nbytes for nd in kwargs.values() if isinstance(nd, np.ndarray)

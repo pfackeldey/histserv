@@ -4,7 +4,7 @@
 import grpc
 import warnings
 
-from . import hist_pb2 as hist__pb2
+import histserv.protos.hist_pb2 as hist__pb2
 
 GRPC_GENERATED_VERSION = "1.78.0"
 GRPC_VERSION = grpc.__version__

@@ -23,7 +23,7 @@ from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\nhist.proto\x1a\x1fgoogle/protobuf/timestamp.proto" \n\x0bInitRequest\x12\x11\n\thist_json\x18\x01 \x01(\t"\x1f\n\x0cInitResponse\x12\x0f\n\x07hist_id\x18\x01 \x01(\t" \n\rExistsRequest\x12\x0f\n\x07hist_id\x18\x01 \x01(\t" \n\x0e\x45xistsResponse\x12\x0e\n\x06\x65xists\x18\x01 \x01(\x08"\x7f\n\x0b\x46illRequest\x12\x0f\n\x07hist_id\x18\x01 \x01(\t\x12(\n\x06kwargs\x18\x02 \x03(\x0b\x32\x18.FillRequest.KwargsEntry\x1a\x35\n\x0bKwargsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x15\n\x05value\x18\x02 \x01(\x0b\x32\x06.Value:\x02\x38\x01"\x0e\n\x0c\x46illResponse">\n\x0fSnapshotRequest\x12\x0f\n\x07hist_id\x18\x01 \x01(\t\x12\x1a\n\x12\x64\x65lete_from_server\x18\x02 \x01(\x08"\x85\x01\n\x10SnapshotResponse\x12\x11\n\thist_json\x18\x01 \x01(\t\x12)\n\x04\x64\x61ta\x18\x02 \x03(\x0b\x32\x1b.SnapshotResponse.DataEntry\x1a\x33\n\tDataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x15\n\x05value\x18\x02 \x01(\x0b\x32\x06.Value:\x02\x38\x01" \n\rDeleteRequest\x12\x0f\n\x07hist_id\x18\x01 \x01(\t"\x10\n\x0e\x44\x65leteResponse"4\n\x0c\x46lushRequest\x12\x0f\n\x07hist_id\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65stination\x18\x02 \x01(\t"\x0f\n\rFlushResponse"\x0e\n\x0cStatsRequest"\x81\x03\n\rStatsResponse\x12\x17\n\x0fhistogram_count\x18\x01 \x01(\x04\x12\x17\n\x0fhistogram_bytes\x18\x02 \x01(\x04\x12\x13\n\x0b\x61\x63tive_rpcs\x18\x03 \x01(\x04\x12\x0f\n\x07version\x18\x04 \x01(\t\x12\x16\n\x0euptime_seconds\x18\x05 \x01(\x04\x12\x18\n\x10user_cpu_seconds\x18\x06 \x01(\x01\x12\x1a\n\x12system_cpu_seconds\x18\x07 \x01(\x01\x12:\n\x0frpc_calls_total\x18\x08 \x03(\x0b\x32!.StatsResponse.RpcCallsTotalEntry\x12/\n\x0bobserved_at\x18\t \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x0ctoken_scoped\x18\n \x01(\x0b\x32\x11.TokenScopedStats\x1a\x34\n\x12RpcCallsTotalEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x04:\x02\x38\x01"\xb9\x01\n\x10TokenScopedStats\x12\x17\n\x0fhistogram_count\x18\x01 \x01(\x04\x12\x17\n\x0fhistogram_bytes\x18\x02 \x01(\x04\x12=\n\x0frpc_calls_total\x18\x03 \x03(\x0b\x32$.TokenScopedStats.RpcCallsTotalEntry\x1a\x34\n\x12RpcCallsTotalEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x04:\x02\x38\x01"z\n\x05\x44type\x12\x19\n\x04type\x18\x02 \x01(\x0e\x32\x0b.Dtype.Type"V\n\x04Type\x12\x13\n\x0fTYPE_DT_FLOAT32\x10\x00\x12\x13\n\x0fTYPE_DT_FLOAT64\x10\x01\x12\x11\n\rTYPE_DT_INT32\x10\x02\x12\x11\n\rTYPE_DT_INT64\x10\x03"=\n\x07Ndarray\x12\r\n\x05shape\x18\x01 \x03(\x03\x12\x15\n\x05\x64type\x18\x02 \x01(\x0b\x32\x06.Dtype\x12\x0c\n\x04\x64\x61ta\x18\x03 \x01(\x0c"t\n\x05Value\x12\x1f\n\x0b\x61rray_value\x18\x01 \x01(\x0b\x32\x08.NdarrayH\x00\x12\x16\n\x0cstring_value\x18\x02 \x01(\tH\x00\x12\x13\n\tint_value\x18\x03 \x01(\x03H\x00\x12\x14\n\nbool_value\x18\x04 \x01(\x08H\x00\x42\x07\n\x05value2\xc4\x02\n\x13HistogrammerService\x12%\n\x04Init\x12\x0c.InitRequest\x1a\r.InitResponse"\x00\x12+\n\x06\x45xists\x12\x0e.ExistsRequest\x1a\x0f.ExistsResponse"\x00\x12%\n\x04\x46ill\x12\x0c.FillRequest\x1a\r.FillResponse"\x00\x12\x31\n\x08Snapshot\x12\x10.SnapshotRequest\x1a\x11.SnapshotResponse"\x00\x12+\n\x06\x44\x65lete\x12\x0e.DeleteRequest\x1a\x0f.DeleteResponse"\x00\x12(\n\x05\x46lush\x12\r.FlushRequest\x1a\x0e.FlushResponse"\x00\x12(\n\x05Stats\x12\r.StatsRequest\x1a\x0e.StatsResponse"\x00\x62\x06proto3'
+    b'\n\nhist.proto\x1a\x1fgoogle/protobuf/timestamp.proto" \n\x0bInitRequest\x12\x11\n\thist_json\x18\x01 \x01(\t"\x1f\n\x0cInitResponse\x12\x0f\n\x07hist_id\x18\x01 \x01(\t" \n\rExistsRequest\x12\x0f\n\x07hist_id\x18\x01 \x01(\t" \n\x0e\x45xistsResponse\x12\x0e\n\x06\x65xists\x18\x01 \x01(\x08"\xa5\x01\n\x0b\x46illRequest\x12\x0f\n\x07hist_id\x18\x01 \x01(\t\x12\x16\n\tunique_id\x18\x02 \x01(\tH\x00\x88\x01\x01\x12(\n\x06kwargs\x18\x03 \x03(\x0b\x32\x18.FillRequest.KwargsEntry\x1a\x35\n\x0bKwargsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x15\n\x05value\x18\x02 \x01(\x0b\x32\x06.Value:\x02\x38\x01\x42\x0c\n\n_unique_id"\x0e\n\x0c\x46illResponse">\n\x0fSnapshotRequest\x12\x0f\n\x07hist_id\x18\x01 \x01(\t\x12\x1a\n\x12\x64\x65lete_from_server\x18\x02 \x01(\x08"\x85\x01\n\x10SnapshotResponse\x12\x11\n\thist_json\x18\x01 \x01(\t\x12)\n\x04\x64\x61ta\x18\x02 \x03(\x0b\x32\x1b.SnapshotResponse.DataEntry\x1a\x33\n\tDataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x15\n\x05value\x18\x02 \x01(\x0b\x32\x06.Value:\x02\x38\x01" \n\rDeleteRequest\x12\x0f\n\x07hist_id\x18\x01 \x01(\t"\x10\n\x0e\x44\x65leteResponse"4\n\x0c\x46lushRequest\x12\x0f\n\x07hist_id\x18\x01 \x01(\t\x12\x13\n\x0b\x64\x65stination\x18\x02 \x01(\t"\x0f\n\rFlushResponse"\x0e\n\x0cStatsRequest"\x81\x03\n\rStatsResponse\x12\x17\n\x0fhistogram_count\x18\x01 \x01(\x04\x12\x17\n\x0fhistogram_bytes\x18\x02 \x01(\x04\x12\x13\n\x0b\x61\x63tive_rpcs\x18\x03 \x01(\x04\x12\x0f\n\x07version\x18\x04 \x01(\t\x12\x16\n\x0euptime_seconds\x18\x05 \x01(\x04\x12\x18\n\x10user_cpu_seconds\x18\x06 \x01(\x01\x12\x1a\n\x12system_cpu_seconds\x18\x07 \x01(\x01\x12:\n\x0frpc_calls_total\x18\x08 \x03(\x0b\x32!.StatsResponse.RpcCallsTotalEntry\x12/\n\x0bobserved_at\x18\t \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x0ctoken_scoped\x18\n \x01(\x0b\x32\x11.TokenScopedStats\x1a\x34\n\x12RpcCallsTotalEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x04:\x02\x38\x01"\xb9\x01\n\x10TokenScopedStats\x12\x17\n\x0fhistogram_count\x18\x01 \x01(\x04\x12\x17\n\x0fhistogram_bytes\x18\x02 \x01(\x04\x12=\n\x0frpc_calls_total\x18\x03 \x03(\x0b\x32$.TokenScopedStats.RpcCallsTotalEntry\x1a\x34\n\x12RpcCallsTotalEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x04:\x02\x38\x01"z\n\x05\x44type\x12\x19\n\x04type\x18\x02 \x01(\x0e\x32\x0b.Dtype.Type"V\n\x04Type\x12\x13\n\x0fTYPE_DT_FLOAT32\x10\x00\x12\x13\n\x0fTYPE_DT_FLOAT64\x10\x01\x12\x11\n\rTYPE_DT_INT32\x10\x02\x12\x11\n\rTYPE_DT_INT64\x10\x03"=\n\x07Ndarray\x12\r\n\x05shape\x18\x01 \x03(\x03\x12\x15\n\x05\x64type\x18\x02 \x01(\x0b\x32\x06.Dtype\x12\x0c\n\x04\x64\x61ta\x18\x03 \x01(\x0c"t\n\x05Value\x12\x1f\n\x0b\x61rray_value\x18\x01 \x01(\x0b\x32\x08.NdarrayH\x00\x12\x16\n\x0cstring_value\x18\x02 \x01(\tH\x00\x12\x13\n\tint_value\x18\x03 \x01(\x03H\x00\x12\x14\n\nbool_value\x18\x04 \x01(\x08H\x00\x42\x07\n\x05value2\xc4\x02\n\x13HistogrammerService\x12%\n\x04Init\x12\x0c.InitRequest\x1a\r.InitResponse"\x00\x12+\n\x06\x45xists\x12\x0e.ExistsRequest\x1a\x0f.ExistsResponse"\x00\x12%\n\x04\x46ill\x12\x0c.FillRequest\x1a\r.FillResponse"\x00\x12\x31\n\x08Snapshot\x12\x10.SnapshotRequest\x1a\x11.SnapshotResponse"\x00\x12+\n\x06\x44\x65lete\x12\x0e.DeleteRequest\x1a\x0f.DeleteResponse"\x00\x12(\n\x05\x46lush\x12\r.FlushRequest\x1a\x0e.FlushResponse"\x00\x12(\n\x05Stats\x12\r.StatsRequest\x1a\x0e.StatsResponse"\x00\x62\x06proto3'
 )
 
 _globals = globals()
@@ -47,44 +47,44 @@ if not _descriptor._USE_C_DESCRIPTORS:
     _globals["_EXISTSREQUEST"]._serialized_end = 146
     _globals["_EXISTSRESPONSE"]._serialized_start = 148
     _globals["_EXISTSRESPONSE"]._serialized_end = 180
-    _globals["_FILLREQUEST"]._serialized_start = 182
-    _globals["_FILLREQUEST"]._serialized_end = 309
-    _globals["_FILLREQUEST_KWARGSENTRY"]._serialized_start = 256
-    _globals["_FILLREQUEST_KWARGSENTRY"]._serialized_end = 309
-    _globals["_FILLRESPONSE"]._serialized_start = 311
-    _globals["_FILLRESPONSE"]._serialized_end = 325
-    _globals["_SNAPSHOTREQUEST"]._serialized_start = 327
-    _globals["_SNAPSHOTREQUEST"]._serialized_end = 389
-    _globals["_SNAPSHOTRESPONSE"]._serialized_start = 392
-    _globals["_SNAPSHOTRESPONSE"]._serialized_end = 525
-    _globals["_SNAPSHOTRESPONSE_DATAENTRY"]._serialized_start = 474
-    _globals["_SNAPSHOTRESPONSE_DATAENTRY"]._serialized_end = 525
-    _globals["_DELETEREQUEST"]._serialized_start = 527
-    _globals["_DELETEREQUEST"]._serialized_end = 559
-    _globals["_DELETERESPONSE"]._serialized_start = 561
-    _globals["_DELETERESPONSE"]._serialized_end = 577
-    _globals["_FLUSHREQUEST"]._serialized_start = 579
-    _globals["_FLUSHREQUEST"]._serialized_end = 631
-    _globals["_FLUSHRESPONSE"]._serialized_start = 633
-    _globals["_FLUSHRESPONSE"]._serialized_end = 648
-    _globals["_STATSREQUEST"]._serialized_start = 650
-    _globals["_STATSREQUEST"]._serialized_end = 664
-    _globals["_STATSRESPONSE"]._serialized_start = 667
-    _globals["_STATSRESPONSE"]._serialized_end = 1052
-    _globals["_STATSRESPONSE_RPCCALLSTOTALENTRY"]._serialized_start = 1000
-    _globals["_STATSRESPONSE_RPCCALLSTOTALENTRY"]._serialized_end = 1052
-    _globals["_TOKENSCOPEDSTATS"]._serialized_start = 1055
-    _globals["_TOKENSCOPEDSTATS"]._serialized_end = 1240
-    _globals["_TOKENSCOPEDSTATS_RPCCALLSTOTALENTRY"]._serialized_start = 1000
-    _globals["_TOKENSCOPEDSTATS_RPCCALLSTOTALENTRY"]._serialized_end = 1052
-    _globals["_DTYPE"]._serialized_start = 1242
-    _globals["_DTYPE"]._serialized_end = 1364
-    _globals["_DTYPE_TYPE"]._serialized_start = 1278
-    _globals["_DTYPE_TYPE"]._serialized_end = 1364
-    _globals["_NDARRAY"]._serialized_start = 1366
-    _globals["_NDARRAY"]._serialized_end = 1427
-    _globals["_VALUE"]._serialized_start = 1429
-    _globals["_VALUE"]._serialized_end = 1545
-    _globals["_HISTOGRAMMERSERVICE"]._serialized_start = 1548
-    _globals["_HISTOGRAMMERSERVICE"]._serialized_end = 1872
+    _globals["_FILLREQUEST"]._serialized_start = 183
+    _globals["_FILLREQUEST"]._serialized_end = 348
+    _globals["_FILLREQUEST_KWARGSENTRY"]._serialized_start = 281
+    _globals["_FILLREQUEST_KWARGSENTRY"]._serialized_end = 334
+    _globals["_FILLRESPONSE"]._serialized_start = 350
+    _globals["_FILLRESPONSE"]._serialized_end = 364
+    _globals["_SNAPSHOTREQUEST"]._serialized_start = 366
+    _globals["_SNAPSHOTREQUEST"]._serialized_end = 428
+    _globals["_SNAPSHOTRESPONSE"]._serialized_start = 431
+    _globals["_SNAPSHOTRESPONSE"]._serialized_end = 564
+    _globals["_SNAPSHOTRESPONSE_DATAENTRY"]._serialized_start = 513
+    _globals["_SNAPSHOTRESPONSE_DATAENTRY"]._serialized_end = 564
+    _globals["_DELETEREQUEST"]._serialized_start = 566
+    _globals["_DELETEREQUEST"]._serialized_end = 598
+    _globals["_DELETERESPONSE"]._serialized_start = 600
+    _globals["_DELETERESPONSE"]._serialized_end = 616
+    _globals["_FLUSHREQUEST"]._serialized_start = 618
+    _globals["_FLUSHREQUEST"]._serialized_end = 670
+    _globals["_FLUSHRESPONSE"]._serialized_start = 672
+    _globals["_FLUSHRESPONSE"]._serialized_end = 687
+    _globals["_STATSREQUEST"]._serialized_start = 689
+    _globals["_STATSREQUEST"]._serialized_end = 703
+    _globals["_STATSRESPONSE"]._serialized_start = 706
+    _globals["_STATSRESPONSE"]._serialized_end = 1091
+    _globals["_STATSRESPONSE_RPCCALLSTOTALENTRY"]._serialized_start = 1039
+    _globals["_STATSRESPONSE_RPCCALLSTOTALENTRY"]._serialized_end = 1091
+    _globals["_TOKENSCOPEDSTATS"]._serialized_start = 1094
+    _globals["_TOKENSCOPEDSTATS"]._serialized_end = 1279
+    _globals["_TOKENSCOPEDSTATS_RPCCALLSTOTALENTRY"]._serialized_start = 1039
+    _globals["_TOKENSCOPEDSTATS_RPCCALLSTOTALENTRY"]._serialized_end = 1091
+    _globals["_DTYPE"]._serialized_start = 1281
+    _globals["_DTYPE"]._serialized_end = 1403
+    _globals["_DTYPE_TYPE"]._serialized_start = 1317
+    _globals["_DTYPE_TYPE"]._serialized_end = 1403
+    _globals["_NDARRAY"]._serialized_start = 1405
+    _globals["_NDARRAY"]._serialized_end = 1466
+    _globals["_VALUE"]._serialized_start = 1468
+    _globals["_VALUE"]._serialized_end = 1584
+    _globals["_HISTOGRAMMERSERVICE"]._serialized_start = 1587
+    _globals["_HISTOGRAMMERSERVICE"]._serialized_end = 1911
 # @@protoc_insertion_point(module_scope)

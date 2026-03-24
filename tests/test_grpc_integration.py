@@ -43,6 +43,21 @@ def test_remote_fill_matches_local_hist_for_regular_axes(client: Client) -> None
     np.testing.assert_equal(remote_snapshot.view(flow=True), local_hist.view(flow=True))
 
 
+def test_remote_fill_reject_with_duped_unique_id(client: Client) -> None:
+    remote_hist = client.init(_regular_hist(), token="alice")
+
+    # first one succeeds
+    remote_hist.fill(
+        x=np.array([0.25, 1.5, 3.75], dtype=np.float32), unique_id=["foo", "bar"]
+    )
+
+    # second one errors
+    with pytest.raises(grpc.RpcError, match="StatusCode.ALREADY_EXISTS"):
+        remote_hist.fill(
+            x=np.array([0.25, 1.5, 3.75], dtype=np.float32), unique_id=["foo", "bar"]
+        )
+
+
 def test_remote_fill_matches_local_hist_for_weighted_categorical_axes(
     client: Client,
 ) -> None:

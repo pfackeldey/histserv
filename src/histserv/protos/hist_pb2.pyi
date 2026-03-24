@@ -35,7 +35,7 @@ class ExistsResponse(_message.Message):
     def __init__(self, exists: bool = ...) -> None: ...
 
 class FillRequest(_message.Message):
-    __slots__ = ("hist_id", "kwargs")
+    __slots__ = ("hist_id", "unique_id", "kwargs")
     class KwargsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -49,12 +49,15 @@ class FillRequest(_message.Message):
         ) -> None: ...
 
     HIST_ID_FIELD_NUMBER: _ClassVar[int]
+    UNIQUE_ID_FIELD_NUMBER: _ClassVar[int]
     KWARGS_FIELD_NUMBER: _ClassVar[int]
     hist_id: str
+    unique_id: str
     kwargs: _containers.MessageMap[str, Value]
     def __init__(
         self,
         hist_id: _Optional[str] = ...,
+        unique_id: _Optional[str] = ...,
         kwargs: _Optional[_Mapping[str, Value]] = ...,
     ) -> None: ...
 
