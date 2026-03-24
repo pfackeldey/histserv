@@ -19,7 +19,7 @@ conda install -c conda-forge histserv
 Start gRPC server (or just `./example/start_server.sh`):
 ```shell
 histserv --port 50051 --n-threads 4
-# INFO:histserv:started - listening on [::]:50051 with 4 threads
+# 2026-03-24 11:58:00.643 INFO:histserv:server (listening at [::]:50051) started with port=50051, n_threads=4, prune_after=24.00 h, prune_interval=5.00 min, stats_interval=5.00 s
 ```
 
 Then run:
@@ -105,12 +105,12 @@ python example/client.py
 
 And the server logs additionally (after running the client script):
 ```shell
-# INFO:histserv:RPC<Init> - initialized histogram (hist_id=52c77c93da8146f2a72c53af269d1ab5)
-# INFO:histserv:RPC<Fill> - filled with 24.00 MB (hist_id=52c77c93da8146f2a72c53af269d1ab5)
-# INFO:histserv:RPC<Snapshot> - created snapshot (hist_id=52c77c93da8146f2a72c53af269d1ab5)
-# INFO:histserv:RPC<Fill> - filled with 24.00 MB (hist_id=52c77c93da8146f2a72c53af269d1ab5)
-# INFO:histserv:RPC<Fill> - filled with 24.00 MB (hist_id=52c77c93da8146f2a72c53af269d1ab5)
-# INFO:histserv:RPC<Flush> - flushed histogram to hist.h5 (hist_id=52c77c93da8146f2a72c53af269d1ab5)
+2026-03-24 11:58:29.113 INFO:histserv:RPC<Init> - initialized histogram (hist_id=52c77c93da8146f2a72c53af269d1ab5)
+2026-03-24 11:58:29.189 INFO:histserv:RPC<Fill> - filled with 24.00 MB of decompressed arrays (hist_id=52c77c93da8146f2a72c53af269d1ab5)
+2026-03-24 11:58:29.190 INFO:histserv:RPC<Snapshot> - created snapshot (hist_id=52c77c93da8146f2a72c53af269d1ab5)
+2026-03-24 11:58:29.237 INFO:histserv:RPC<Fill> - filled with 24.00 MB of decompressed arrays (hist_id=52c77c93da8146f2a72c53af269d1ab5)
+2026-03-24 11:58:29.282 INFO:histserv:RPC<Fill> - filled with 24.00 MB of decompressed arrays (hist_id=52c77c93da8146f2a72c53af269d1ab5)
+2026-03-24 11:58:29.336 INFO:histserv:RPC<Flush> - flushed histogram to hist.h5 (hist_id=52c77c93da8146f2a72c53af269d1ab5)
 ```
 
 Or check out how to use remote histogram filling with an example coffea Processor in `example/coffea_processor.py`.
@@ -130,13 +130,6 @@ Axis support:
 - `np.float32`
 - `np.int64`
 - `np.int32`
-
-## Stats RPC
-
-The server exposes a lightweight `Stats` RPC for point-in-time introspection.
-
-- `client.stats()` returns global stats
-- `client.stats(token="alice")` returns stats scoped to histograms owned by token `alice`
 
 ## Developer Info
 
