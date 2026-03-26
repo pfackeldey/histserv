@@ -6,6 +6,8 @@ import "google/protobuf/timestamp.proto";
 service HistogrammerService {
   // Sends a histogram initialization request
   rpc Init(InitRequest) returns (InitResponse) {}
+  // Returns histogram metadata for reconnecting fill clients
+  rpc Describe(DescribeRequest) returns (DescribeResponse) {}
   // Checks whether a histogram exists and is accessible
   rpc Exists(ExistsRequest) returns (ExistsResponse) {}
   // Sends a filling request
@@ -14,6 +16,8 @@ service HistogrammerService {
   rpc Snapshot(SnapshotRequest) returns (SnapshotResponse) {}
   // Deletes a histogram from the server
   rpc Delete(DeleteRequest) returns (DeleteResponse) {}
+  // Resets a histogram on the server
+  rpc Reset(ResetRequest) returns (ResetResponse) {}
   // Sends a flushing request (to disk)
   rpc Flush(FlushRequest) returns (FlushResponse) {}
   // Returns a point-in-time snapshot of server stats
@@ -30,6 +34,14 @@ message InitResponse {
   string hist_id = 1;
 }
 
+message DescribeRequest {
+  string hist_id = 1;
+}
+
+message DescribeResponse {
+  string hist_json = 1;
+}
+
 message ExistsRequest {
   string hist_id = 1;
 }
@@ -38,12 +50,12 @@ message ExistsResponse {
   bool exists = 1;
 }
 
-// The request message containing the values to fill the histogram.
-// This map is essentially **kwargs that is passed to histogram.fill(**kwargs)
+// The request message containing the pre-binned values to merge into a chunk.
 message FillRequest {
   string hist_id = 1;
-  optional string unique_id = 2;
-  map<string, Value> kwargs = 3;
+  optional bytes unique_id = 2;
+  map<string, Value> chunk_key = 3;
+  map<string, Value> dense_storage = 4;
 }
 
 message FillResponse {}
@@ -65,6 +77,12 @@ message DeleteRequest {
 }
 
 message DeleteResponse {}
+
+message ResetRequest {
+  string hist_id = 1;
+}
+
+message ResetResponse {}
 
 // The request message for flushing the histogram.
 message FlushRequest {

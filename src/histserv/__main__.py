@@ -22,13 +22,6 @@ async def main() -> None:
         help="TCP port to bind the gRPC server to.",
     )
     ap.add_argument(
-        "-t",
-        "--n-threads",
-        default=1,
-        type=int,
-        help="Number of worker threads for blocking gRPC handler work.",
-    )
-    ap.add_argument(
         "--prune-after-seconds",
         default=24 * 60 * 60,
         type=float,
@@ -58,7 +51,6 @@ async def main() -> None:
 
     options = ServerOptions(
         port=args.port,
-        n_threads=args.n_threads,
         prune_after=timedelta(seconds=args.prune_after_seconds),
         prune_interval=timedelta(seconds=args.prune_interval_seconds),
         stats_interval=timedelta(seconds=args.stats_interval_seconds),
@@ -67,11 +59,10 @@ async def main() -> None:
     server = Server(options=options)
     await server.start()
     logger.info(
-        "server (listening at %s) started with port=%s, n_threads=%s, "
+        "server (listening at %s) started with port=%s, "
         "prune_after=%s, prune_interval=%s, stats_interval=%s",
         server.address,
         options.port,
-        options.n_threads,
         timedelta_repr(options.prune_after),
         timedelta_repr(options.prune_interval),
         timedelta_repr(options.stats_interval),
@@ -80,9 +71,6 @@ async def main() -> None:
         await server.wait_for_termination()
     finally:
         logger.info("Starting graceful shutdown...")
-        # Shuts down the server with 5 seconds of grace period. During the
-        # grace period, the server won't accept new connections and allow
-        # existing RPCs to continue within the grace period.
         await server.stop(5)
 
 

@@ -6,32 +6,39 @@ import time
 import uuid
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import partial
+from collections.abc import Mapping
 from typing import Final
 
 import grpc
 import hist
-import numpy as np
 import uhi.io.json
 
 from histserv import __version__
+from histserv.chunked_hist import ChunkedHist
 from histserv.logging import (
     fmt_rpc_logger_msg,
     fmt_rpc_logger_msg_no_hist_id,
     get_logger,
 )
 from histserv.protos import hist_pb2, hist_pb2_grpc
-from histserv.serialize import deserialize_proto_Value, serialize_hist
+from histserv.serialize import (
+    deserialize_hist_storage,
+    deserialize_proto_Value,
+    serialize_hist,
+)
 from histserv.util import bytes_repr, duration_repr
 
 logger = get_logger("histserv")
 
 RPC_INIT: Final = "Init"
+RPC_DESCRIBE: Final = "Describe"
 RPC_EXISTS: Final = "Exists"
 RPC_FILL: Final = "Fill"
 RPC_SNAPSHOT: Final = "Snapshot"
 RPC_DELETE: Final = "Delete"
+RPC_RESET: Final = "Reset"
 RPC_FLUSH: Final = "Flush"
 RPC_STATS: Final = "Stats"
 
@@ -113,10 +120,11 @@ class LoggingInterceptor(grpc.aio.ServerInterceptor):
 
 @dataclass
 class HistogramEntry:
-    hist: hist.Hist
+    hist: ChunkedHist
+    hist_json: str
     token: str | None
     last_access: datetime
-    unique_ids: set[str]
+    unique_ids: set[bytes]
 
 
 @dataclass(frozen=True)
@@ -137,14 +145,13 @@ class StatsSnapshot:
     system_cpu_seconds: float
     rpc_calls_total: dict[str, int]
     observed_at: datetime
-    # CPU counters are process-wide even when token_scoped is present.
     token_scoped: TokenScopedStatsSnapshot | None
 
 
 class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
     def __init__(self) -> None:
         super().__init__()
-        self._entries = {}
+        self._entries: dict[str, HistogramEntry] = {}
         self._active_rpcs = 0
         self._started_at = datetime.now(timezone.utc)
         self._rpc_calls_total: Counter[str] = Counter()
@@ -174,12 +181,13 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
         exc: Exception,
     ) -> None:
         error_msg = f"unexpected server error during {rpc_method}: {exc!r}"
-        logger.exception(
+        logger.error(
             fmt_rpc_logger_msg(
                 rpc_method=rpc_method,
                 hist_id=hist_id,
                 msg=error_msg,
-            )
+            ),
+            exc_info=exc,
         )
         await context.abort(grpc.StatusCode.INTERNAL, error_msg)
 
@@ -199,12 +207,42 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
             entry.last_access = datetime.now(timezone.utc)
         return entry
 
+    async def _require_entry(
+        self,
+        *,
+        context: grpc.ServicerContext,
+        rpc_method: str,
+        hist_id: str,
+        request_token: str | None,
+    ) -> HistogramEntry:
+        entry = self._get_entry(hist_id=hist_id, request_token=request_token)
+        if entry is not None:
+            return entry
+
+        error_msg = f"unknown histogram id: {hist_id}"
+        logger.debug(
+            fmt_rpc_logger_msg(
+                rpc_method=rpc_method,
+                hist_id=hist_id,
+                msg=error_msg,
+            )
+        )
+        await context.abort(grpc.StatusCode.NOT_FOUND, error_msg)
+        raise AssertionError("unreachable")
+
+    def _histogram_bytes(self, entries: list[HistogramEntry]) -> int:
+        return sum(entry.hist.histogram_bytes() for entry in entries)
+
     @staticmethod
-    def _histogram_bytes(entries: list[HistogramEntry]) -> int:
-        histogram_bytes = 0
-        for entry in entries:
-            histogram_bytes += entry.hist.view(True).nbytes
-        return histogram_bytes
+    def _materialize_hist(hist_obj: ChunkedHist) -> hist.Hist:
+        return hist_obj.to_hist()
+
+    def _deserialize_chunk_key(
+        self, chunk_key_msg: Mapping[str, hist_pb2.Value]
+    ) -> dict[str, object]:
+        return {
+            key: deserialize_proto_Value(value) for key, value in chunk_key_msg.items()
+        }
 
     def _compute_stats(self, *, token: str | None) -> StatsSnapshot:
         entries = list(self._entries.values())
@@ -243,6 +281,17 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
             token_scoped=token_scoped,
         )
 
+    def entries_snapshot(self) -> tuple[HistogramEntry, ...]:
+        return tuple(self._entries.values())
+
+    def prune_entries_older_than(self, *, now: datetime, age: timedelta) -> list[str]:
+        removed: list[str] = []
+        for hist_id, entry in tuple(self._entries.items()):
+            if (now - entry.last_access) >= age:
+                self._entries.pop(hist_id, None)
+                removed.append(hist_id)
+        return removed
+
     async def Init(
         self, request: hist_pb2.InitRequest, context: grpc.ServicerContext
     ) -> hist_pb2.InitResponse:
@@ -262,13 +311,16 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 await context.abort(grpc.StatusCode.INTERNAL, error_msg)
 
             try:
-                hist_obj = hist.Hist(
+                source_hist = hist.Hist(
                     json.loads(request.hist_json, object_hook=uhi.io.json.object_hook)
                 )
+                hist_obj = ChunkedHist.from_hist(source_hist)
             except (TypeError, ValueError, json.JSONDecodeError) as exc:
                 error_msg = f"invalid init payload: {exc!r}"
                 logger.error(fmt_rpc_msg(msg=error_msg))
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, error_msg)
+            except grpc.RpcError:
+                raise
             except Exception as exc:
                 await self._abort_internal(
                     context=context,
@@ -279,17 +331,34 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
 
             self._entries[hist_id] = HistogramEntry(
                 hist=hist_obj,
+                hist_json=request.hist_json,
                 token=request_token,
                 last_access=datetime.now(timezone.utc),
                 unique_ids=set(),
             )
 
-            logger.info(fmt_rpc_msg(msg="initialized histogram"))
+            logger.debug(fmt_rpc_msg(msg="initialized histogram"))
             return hist_pb2.InitResponse(hist_id=hist_id)
         finally:
             self._rpc_finished()
 
         raise AssertionError("unreachable")
+
+    async def Describe(
+        self, request: hist_pb2.DescribeRequest, context: grpc.ServicerContext
+    ) -> hist_pb2.DescribeResponse:
+        request_token = self._request_token(context)
+        self._rpc_started(RPC_DESCRIBE, request_token)
+        try:
+            entry = await self._require_entry(
+                context=context,
+                rpc_method=RPC_DESCRIBE,
+                hist_id=request.hist_id,
+                request_token=request_token,
+            )
+            return hist_pb2.DescribeResponse(hist_json=entry.hist_json)
+        finally:
+            self._rpc_finished()
 
     async def Exists(
         self, request: hist_pb2.ExistsRequest, context: grpc.ServicerContext
@@ -297,7 +366,6 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
         request_token = self._request_token(context)
         self._rpc_started(RPC_EXISTS, request_token)
         try:
-            # Exists is intentionally read-only and does not refresh last_access.
             return hist_pb2.ExistsResponse(
                 exists=self._get_entry(
                     hist_id=request.hist_id,
@@ -320,40 +388,37 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 fmt_rpc_logger_msg, rpc_method=RPC_FILL, hist_id=hist_id
             )
 
-            entry = self._get_entry(hist_id=hist_id, request_token=request_token)
-            if entry is None:
-                error_msg = f"unknown histogram id: {hist_id}"
-                logger.warning(fmt_rpc_msg(msg=error_msg))
-                await context.abort(grpc.StatusCode.NOT_FOUND, error_msg)
-            assert entry is not None
+            entry = await self._require_entry(
+                context=context,
+                rpc_method=RPC_FILL,
+                hist_id=hist_id,
+                request_token=request_token,
+            )
 
             if request.HasField("unique_id") and request.unique_id in entry.unique_ids:
-                error_msg = f"rejected fill of histogram id {hist_id}, because {request.unique_id=} already exists"
+                error_msg = (
+                    f"rejected fill of histogram id {hist_id}, because "
+                    f"{request.unique_id=} already exists"
+                )
                 await context.abort(grpc.StatusCode.ALREADY_EXISTS, error_msg)
-            try:
-                kwargs = {
-                    key: deserialize_proto_Value(msg)
-                    for key, msg in request.kwargs.items()
-                }
-            except (TypeError, ValueError) as exc:
-                error_msg = f"invalid fill payload: {exc!r}"
-                logger.error(fmt_rpc_msg(msg=error_msg))
-                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, error_msg)
 
             try:
-                entry.hist.fill(**kwargs)
-
+                chunk_key_kwargs = self._deserialize_chunk_key(request.chunk_key)
+                chunk_key, _ = entry.hist.split_fill_kwargs(chunk_key_kwargs)
+                dense_hist = deserialize_hist_storage(
+                    entry.hist.dense_template,
+                    request.dense_storage,
+                )
+                entry.hist.add_dense_hist(chunk_key, dense_hist)
                 if request.HasField("unique_id"):
                     entry.unique_ids.add(request.unique_id)
 
-                nbytes_filled = sum(
-                    nd.nbytes for nd in kwargs.values() if isinstance(nd, np.ndarray)
-                )
-                logger.info(
+                logger.debug(
                     fmt_rpc_msg(
                         msg=(
-                            f"filled with {bytes_repr(nbytes_filled)} "
-                            "of decompressed arrays"
+                            "merged "
+                            f"{bytes_repr(dense_hist.view(flow=True).nbytes)} "
+                            "of prebinned storage"
                         )
                     )
                 )
@@ -373,6 +438,8 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
         finally:
             self._rpc_finished()
 
+        raise AssertionError("unreachable")
+
     async def Snapshot(
         self, request: hist_pb2.SnapshotRequest, context: grpc.ServicerContext
     ) -> hist_pb2.SnapshotResponse:
@@ -380,31 +447,41 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
         self._rpc_started(RPC_SNAPSHOT, request_token)
         try:
             hist_id = request.hist_id
-            fmt_rpc_msg = partial(
-                fmt_rpc_logger_msg, rpc_method=RPC_SNAPSHOT, hist_id=hist_id
-            )
-
             try:
-                entry = self._get_entry(hist_id=hist_id, request_token=request_token)
-                if entry is None:
-                    error_msg = f"unknown histogram id: {hist_id}"
-                    logger.warning(fmt_rpc_msg(msg=error_msg))
-                    await context.abort(grpc.StatusCode.NOT_FOUND, error_msg)
-                assert entry is not None
+                entry = await self._require_entry(
+                    context=context,
+                    rpc_method=RPC_SNAPSHOT,
+                    hist_id=hist_id,
+                    request_token=request_token,
+                )
 
                 if request.delete_from_server:
                     hist_obj = self._entries.pop(hist_id).hist
                 else:
                     hist_obj = entry.hist
 
-                hist_json, data = serialize_hist(hist_obj)
+                hist_json, data = serialize_hist(self._materialize_hist(hist_obj))
 
-                logger.info(fmt_rpc_msg(msg="created snapshot"))
+                logger.debug(
+                    fmt_rpc_logger_msg(
+                        rpc_method=RPC_SNAPSHOT,
+                        hist_id=hist_id,
+                        msg="created snapshot",
+                    )
+                )
                 return hist_pb2.SnapshotResponse(hist_json=hist_json, data=data)
             except (TypeError, ValueError) as exc:
                 error_msg = f"invalid snapshot state: {exc!r}"
-                logger.error(fmt_rpc_msg(msg=error_msg))
+                logger.error(
+                    fmt_rpc_logger_msg(
+                        rpc_method=RPC_SNAPSHOT,
+                        hist_id=hist_id,
+                        msg=error_msg,
+                    )
+                )
                 await context.abort(grpc.StatusCode.FAILED_PRECONDITION, error_msg)
+            except grpc.RpcError:
+                raise
             except Exception as exc:
                 await self._abort_internal(
                     context=context,
@@ -424,21 +501,22 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
         self._rpc_started(RPC_DELETE, request_token)
         try:
             hist_id = request.hist_id
-            fmt_rpc_msg = partial(
-                fmt_rpc_logger_msg, rpc_method=RPC_DELETE, hist_id=hist_id
-            )
-
             try:
-                entry = self._get_entry(hist_id=hist_id, request_token=request_token)
-                if entry is None:
-                    error_msg = f"unknown histogram id: {hist_id}"
-                    logger.warning(fmt_rpc_msg(msg=error_msg))
-                    await context.abort(grpc.StatusCode.NOT_FOUND, error_msg)
-                assert entry is not None
-
+                await self._require_entry(
+                    context=context,
+                    rpc_method=RPC_DELETE,
+                    hist_id=hist_id,
+                    request_token=request_token,
+                )
                 self._entries.pop(hist_id, None)
 
-                logger.info(fmt_rpc_msg(msg="deleted histogram"))
+                logger.debug(
+                    fmt_rpc_logger_msg(
+                        rpc_method=RPC_DELETE,
+                        hist_id=hist_id,
+                        msg="deleted histogram",
+                    )
+                )
                 return hist_pb2.DeleteResponse()
             except grpc.RpcError:
                 raise
@@ -454,48 +532,104 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
 
         raise AssertionError("unreachable")
 
+    async def Reset(
+        self, request: hist_pb2.ResetRequest, context: grpc.ServicerContext
+    ) -> hist_pb2.ResetResponse:
+        request_token = self._request_token(context)
+        self._rpc_started(RPC_RESET, request_token)
+        try:
+            hist_id = request.hist_id
+            entry = await self._require_entry(
+                context=context,
+                rpc_method=RPC_RESET,
+                hist_id=hist_id,
+                request_token=request_token,
+            )
+
+            try:
+                entry.hist.reset()
+                entry.unique_ids.clear()
+
+                logger.debug(
+                    fmt_rpc_logger_msg(
+                        rpc_method=RPC_RESET,
+                        hist_id=hist_id,
+                        msg="reset histogram",
+                    )
+                )
+                return hist_pb2.ResetResponse()
+            except Exception as exc:
+                await self._abort_internal(
+                    context=context,
+                    rpc_method=RPC_RESET,
+                    hist_id=hist_id,
+                    exc=exc,
+                )
+        finally:
+            self._rpc_finished()
+
+        raise AssertionError("unreachable")
+
     async def Flush(
         self, request: hist_pb2.FlushRequest, context: grpc.ServicerContext
     ) -> hist_pb2.FlushResponse:
         request_token = self._request_token(context)
         self._rpc_started(RPC_FLUSH, request_token)
         try:
-            # TODO: use fsspec to handle remote writes
             import h5py
             import uhi.io.hdf5
 
             hist_id = request.hist_id
             destination = request.destination
-            fmt_rpc_msg = partial(
-                fmt_rpc_logger_msg, rpc_method=RPC_FLUSH, hist_id=hist_id
-            )
 
             if not destination.endswith((".h5", ".hdf5")):
                 error_msg = (
                     f"invalid destination: {destination}, needs to be a hdf5 file, "
                     "e.g., 'hist.hdf5'"
                 )
-                logger.error(fmt_rpc_msg(msg=error_msg))
+                logger.error(
+                    fmt_rpc_logger_msg(
+                        rpc_method=RPC_FLUSH,
+                        hist_id=hist_id,
+                        msg=error_msg,
+                    )
+                )
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, error_msg)
 
             try:
-                entry = self._get_entry(hist_id=hist_id, request_token=request_token)
-                if entry is None:
-                    error_msg = f"unknown histogram id: {hist_id}"
-                    logger.warning(fmt_rpc_msg(msg=error_msg))
-                    await context.abort(grpc.StatusCode.NOT_FOUND, error_msg)
-                assert entry is not None
+                entry = await self._require_entry(
+                    context=context,
+                    rpc_method=RPC_FLUSH,
+                    hist_id=hist_id,
+                    request_token=request_token,
+                )
+                hist_obj = self._materialize_hist(entry.hist)
 
                 with h5py.File(destination, "w") as h5_file:
-                    uhi.io.hdf5.write(h5_file.create_group(hist_id), entry.hist)
+                    uhi.io.hdf5.write(h5_file.create_group(hist_id), hist_obj)
 
                 self._entries.pop(hist_id, None)
 
-                logger.info(fmt_rpc_msg(msg=f"flushed histogram to {destination}"))
+                logger.debug(
+                    fmt_rpc_logger_msg(
+                        rpc_method=RPC_FLUSH,
+                        hist_id=hist_id,
+                        msg=f"flushed histogram to {destination}",
+                    )
+                )
+                return hist_pb2.FlushResponse()
             except OSError as exc:
                 error_msg = f"invalid flush destination: {exc!r}"
-                logger.error(fmt_rpc_msg(msg=error_msg))
+                logger.error(
+                    fmt_rpc_logger_msg(
+                        rpc_method=RPC_FLUSH,
+                        hist_id=hist_id,
+                        msg=error_msg,
+                    )
+                )
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, error_msg)
+            except grpc.RpcError:
+                raise
             except Exception as exc:
                 await self._abort_internal(
                     context=context,
@@ -503,10 +637,10 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                     hist_id=hist_id,
                     exc=exc,
                 )
-
-            return hist_pb2.FlushResponse()
         finally:
             self._rpc_finished()
+
+        raise AssertionError("unreachable")
 
     async def Stats(
         self, request: hist_pb2.StatsRequest, context: grpc.ServicerContext
@@ -515,22 +649,27 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
         request_token = self._request_token(context)
         self._rpc_started(RPC_STATS, request_token)
         try:
-            try:
-                # Unknown tokens do not get an empty scoped view; they are treated
-                # like unknown histogram ids and return NOT_FOUND.
-                if request_token is not None and not any(
-                    entry.token == request_token for entry in self._entries.values()
-                ):
-                    error_msg = f"unknown token: {request_token}"
-                    logger.warning(
-                        fmt_rpc_logger_msg_no_hist_id(
-                            rpc_method=RPC_STATS,
-                            msg=error_msg,
-                        )
+            if request_token is not None and not any(
+                entry.token == request_token for entry in self._entries.values()
+            ):
+                error_msg = f"unknown token: {request_token}"
+                logger.debug(
+                    fmt_rpc_logger_msg_no_hist_id(
+                        rpc_method=RPC_STATS,
+                        msg=error_msg,
                     )
-                    await context.abort(grpc.StatusCode.NOT_FOUND, error_msg)
+                )
+                await context.abort(grpc.StatusCode.NOT_FOUND, error_msg)
 
+            try:
                 stats = self._compute_stats(token=request_token)
+                token_scoped = None
+                if stats.token_scoped is not None:
+                    token_scoped = hist_pb2.TokenScopedStats(
+                        histogram_count=stats.token_scoped.histogram_count,
+                        histogram_bytes=stats.token_scoped.histogram_bytes,
+                        rpc_calls_total=stats.token_scoped.rpc_calls_total,
+                    )
                 return hist_pb2.StatsResponse(
                     histogram_count=stats.histogram_count,
                     histogram_bytes=stats.histogram_bytes,
@@ -541,16 +680,10 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                     system_cpu_seconds=stats.system_cpu_seconds,
                     rpc_calls_total=stats.rpc_calls_total,
                     observed_at=stats.observed_at,
-                    token_scoped=(
-                        hist_pb2.TokenScopedStats(
-                            histogram_count=stats.token_scoped.histogram_count,
-                            histogram_bytes=stats.token_scoped.histogram_bytes,
-                            rpc_calls_total=stats.token_scoped.rpc_calls_total,
-                        )
-                        if stats.token_scoped is not None
-                        else None
-                    ),
+                    token_scoped=token_scoped,
                 )
+            except grpc.RpcError:
+                raise
             except Exception as exc:
                 await self._abort_internal(
                     context=context,

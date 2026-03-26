@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import typing as tp
+from collections.abc import Mapping
 
 import numcodecs
 import numpy as np
@@ -21,6 +22,7 @@ from histserv.protos import hist_pb2
 # yielded the best combination of compression/decompression time and compression
 # factor for float32 NanoAOD columns (Electron_mass, Jet_pt, MET_pt, ...)
 codec = numcodecs.Blosc(cname="zstd", clevel=1, shuffle=numcodecs.Blosc.BITSHUFFLE)
+COMPRESSION_THRESHOLD_BYTES = 1024
 
 
 def serialize_nparray(item: np.ndarray | list | tuple) -> hist_pb2.Ndarray:
@@ -46,13 +48,27 @@ def serialize_nparray(item: np.ndarray | list | tuple) -> hist_pb2.Ndarray:
     shape = list(item.shape)
     dtype = _numpy_dtype_to_proto_dtype(item.dtype)
 
-    # only compress array with more than 16 bytes
-    if item.nbytes < 16:
-        compressed_data = item.tobytes()
+    payload = item.tobytes()
+    if item.nbytes <= COMPRESSION_THRESHOLD_BYTES:
+        encoded_data = payload
     else:
-        compressed_data = codec.encode(item.tobytes())
+        encoded_data = codec.encode(payload)
 
-    return hist_pb2.Ndarray(shape=shape, dtype=dtype, data=compressed_data)
+    return hist_pb2.Ndarray(shape=shape, dtype=dtype, data=encoded_data)
+
+
+def deserialize_nparray(message: hist_pb2.Ndarray) -> np.ndarray:
+    """Deserialize a protobuf ndarray message into a NumPy array."""
+    shape = tuple(message.shape)
+    dtype = _proto_dtype_to_numpy_dtype(message.dtype)
+    raw_nbytes = int(np.prod(shape, dtype=np.int64)) * np.dtype(dtype).itemsize
+
+    if len(message.data) == raw_nbytes:
+        decoded_data = message.data
+    else:
+        decoded_data = codec.decode(message.data)
+
+    return np.frombuffer(decoded_data, dtype=dtype).reshape(shape)
 
 
 def serialize_proto_Value(item: tp.Any) -> hist_pb2.Value:
@@ -125,18 +141,7 @@ def deserialize_proto_Value(message: hist_pb2.Value):
     """
     match message.WhichOneof("value"):
         case "array_value":
-            ndarray = message.array_value
-            shape = tuple(ndarray.shape)
-            dtype = _proto_dtype_to_numpy_dtype(ndarray.dtype)
-
-            # we only compress arrays with more than 16 bytes
-            if len(ndarray.data) < 16:
-                decompressed_data = ndarray.data
-            else:
-                decompressed_data = codec.decode(ndarray.data)
-
-            array = np.frombuffer(decompressed_data, dtype=dtype).reshape(shape)
-            return array
+            return deserialize_nparray(message.array_value)
         case "string_value":
             return message.string_value
         case "int_value":
@@ -189,6 +194,28 @@ def serialize_hist(h: Hist) -> tuple[str, dict[str, hist_pb2.Value]]:
     return json.dumps(hist_ser, default=uhi.io.json.default), data_ser
 
 
+def serialize_hist_storage(h: Hist) -> dict[str, hist_pb2.Value]:
+    """Serialize only histogram storage arrays, excluding metadata."""
+    hist_ser = hist.serialization.to_uhi(h)
+    storage = hist_ser["storage"]
+    storage.pop("type")
+    return {key: serialize_proto_Value(value) for key, value in storage.items()}
+
+
+def deserialize_hist_storage(
+    template: Hist, contents: Mapping[str, hist_pb2.Value]
+) -> Hist:
+    """Reconstruct a histogram from a template and serialized storage arrays."""
+    hist_json = hist.serialization.to_uhi(template)
+    storage = hist_json["storage"]
+    storage_type = storage["type"]
+    hist_json["storage"] = {"type": storage_type}
+    hist_json["storage"].update(
+        {key: deserialize_proto_Value(value) for key, value in contents.items()}
+    )
+    return Hist(hist_json)
+
+
 def deserialize_hist(metadata: str, contents: dict[str, hist_pb2.Value]) -> Hist:
     """Reconstruct a histogram from metadata JSON and serialized contents.
 
@@ -217,15 +244,15 @@ def deserialize_hist(metadata: str, contents: dict[str, hist_pb2.Value]) -> Hist
     return Hist(hist_json)
 
 
-def serialize_unique_id(unique_id: tp.Any) -> str:
-    """Serialize a `unique_id` into a string using SHA256.
+def serialize_unique_id(unique_id: tp.Any) -> bytes:
+    """Serialize a `unique_id` into raw SHA256 digest bytes.
 
     Args:
         unique_id: JSON serializable object
 
     Returns:
-        str: hashed version of `unique_id`.
+        bytes: hashed version of `unique_id`.
     """
     return hashlib.sha256(
         json.dumps(unique_id, sort_keys=True).encode("utf-8")
-    ).hexdigest()
+    ).digest()

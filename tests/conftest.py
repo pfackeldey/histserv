@@ -12,9 +12,8 @@ from histserv.server import Server, ServerOptions
 
 
 class GrpcServerThread:
-    def __init__(self, port: int, *, n_threads: int = 1) -> None:
+    def __init__(self, port: int) -> None:
         self.port = port
-        self.n_threads = n_threads
         self._loop: asyncio.AbstractEventLoop | None = None
         self._server: Server | None = None
         self._started = threading.Event()
@@ -60,9 +59,7 @@ class GrpcServerThread:
             loop.close()
 
     async def _start_server(self) -> None:
-        self._server = Server(
-            options=ServerOptions(port=self.port, n_threads=self.n_threads)
-        )
+        self._server = Server(options=ServerOptions(port=self.port))
         await self._server.start()
 
     async def _stop_server(self) -> None:

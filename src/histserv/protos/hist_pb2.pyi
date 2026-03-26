@@ -22,6 +22,18 @@ class InitResponse(_message.Message):
     hist_id: str
     def __init__(self, hist_id: _Optional[str] = ...) -> None: ...
 
+class DescribeRequest(_message.Message):
+    __slots__ = ("hist_id",)
+    HIST_ID_FIELD_NUMBER: _ClassVar[int]
+    hist_id: str
+    def __init__(self, hist_id: _Optional[str] = ...) -> None: ...
+
+class DescribeResponse(_message.Message):
+    __slots__ = ("hist_json",)
+    HIST_JSON_FIELD_NUMBER: _ClassVar[int]
+    hist_json: str
+    def __init__(self, hist_json: _Optional[str] = ...) -> None: ...
+
 class ExistsRequest(_message.Message):
     __slots__ = ("hist_id",)
     HIST_ID_FIELD_NUMBER: _ClassVar[int]
@@ -35,8 +47,20 @@ class ExistsResponse(_message.Message):
     def __init__(self, exists: bool = ...) -> None: ...
 
 class FillRequest(_message.Message):
-    __slots__ = ("hist_id", "unique_id", "kwargs")
-    class KwargsEntry(_message.Message):
+    __slots__ = ("hist_id", "unique_id", "chunk_key", "dense_storage")
+    class ChunkKeyEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: Value
+        def __init__(
+            self,
+            key: _Optional[str] = ...,
+            value: _Optional[_Union[Value, _Mapping]] = ...,
+        ) -> None: ...
+
+    class DenseStorageEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
         VALUE_FIELD_NUMBER: _ClassVar[int]
@@ -50,15 +74,18 @@ class FillRequest(_message.Message):
 
     HIST_ID_FIELD_NUMBER: _ClassVar[int]
     UNIQUE_ID_FIELD_NUMBER: _ClassVar[int]
-    KWARGS_FIELD_NUMBER: _ClassVar[int]
+    CHUNK_KEY_FIELD_NUMBER: _ClassVar[int]
+    DENSE_STORAGE_FIELD_NUMBER: _ClassVar[int]
     hist_id: str
-    unique_id: str
-    kwargs: _containers.MessageMap[str, Value]
+    unique_id: bytes
+    chunk_key: _containers.MessageMap[str, Value]
+    dense_storage: _containers.MessageMap[str, Value]
     def __init__(
         self,
         hist_id: _Optional[str] = ...,
-        unique_id: _Optional[str] = ...,
-        kwargs: _Optional[_Mapping[str, Value]] = ...,
+        unique_id: _Optional[bytes] = ...,
+        chunk_key: _Optional[_Mapping[str, Value]] = ...,
+        dense_storage: _Optional[_Mapping[str, Value]] = ...,
     ) -> None: ...
 
 class FillResponse(_message.Message):
@@ -106,6 +133,16 @@ class DeleteRequest(_message.Message):
     def __init__(self, hist_id: _Optional[str] = ...) -> None: ...
 
 class DeleteResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ResetRequest(_message.Message):
+    __slots__ = ("hist_id",)
+    HIST_ID_FIELD_NUMBER: _ClassVar[int]
+    hist_id: str
+    def __init__(self, hist_id: _Optional[str] = ...) -> None: ...
+
+class ResetResponse(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
 

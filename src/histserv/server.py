@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from concurrent import futures
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -15,16 +14,13 @@ from histserv.service import Histogrammer, LoggingInterceptor
 @dataclass(frozen=True)
 class ServerOptions:
     port: int = 50051
-    n_threads: int = 1
     prune_after: timedelta = timedelta(days=1)
     prune_interval: timedelta = timedelta(minutes=5)
     stats_interval: timedelta = timedelta(seconds=5)
 
     def __post_init__(self) -> None:
-        if not 0 <= self.port < 0xFFFF:
+        if not 0 <= self.port <= 0xFFFF:
             raise ValueError("port must be between 0 and 65535")
-        if self.n_threads < 1:
-            raise ValueError("n_threads must be at least 1")
         if self.prune_after.total_seconds() < 0:
             raise ValueError("prune_after must be non-negative")
         if self.prune_interval.total_seconds() <= 0:
@@ -43,7 +39,6 @@ class Server:
         self._started = False
 
         self.server = grpc.aio.server(
-            futures.ThreadPoolExecutor(max_workers=self.options.n_threads),
             interceptors=[LoggingInterceptor()],
             compression=grpc.Compression.NoCompression,
             options=[

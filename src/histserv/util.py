@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+import hist
+
 __all__ = [
     "bytes_repr",
     "duration_repr",
+    "reset_histogram",
     "timedelta_repr",
 ]
 
@@ -79,3 +82,37 @@ def timedelta_repr(delta: timedelta) -> str:
         '5.00 min'
     """
     return duration_repr(delta.total_seconds())
+
+
+def reset_histogram(source: hist.Hist) -> hist.Hist:
+    """Return a fresh histogram with empty growable category axes."""
+    axes = [_reset_axis(axis) for axis in source.axes]
+
+    return hist.Hist(
+        *axes,
+        storage=type(source.storage_type())(),
+        name=source.name,
+        label=source.label,
+    )
+
+
+def _reset_axis(axis):
+    if isinstance(axis, hist.axis.IntCategory):
+        return hist.axis.IntCategory(
+            [],
+            name=axis.name,
+            label=axis.label,
+            metadata=axis.metadata,
+            growth=True,
+            flow=False,
+        )
+    if isinstance(axis, hist.axis.StrCategory):
+        return hist.axis.StrCategory(
+            [],
+            name=axis.name,
+            label=axis.label,
+            metadata=axis.metadata,
+            growth=True,
+            flow=False,
+        )
+    return axis

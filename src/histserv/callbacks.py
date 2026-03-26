@@ -15,12 +15,7 @@ async def prune_old_hists(
 ) -> None:
     while True:
         now = datetime.now(timezone.utc)
-        drop_ids = set()
-        for hist_id, entry in histogrammer._entries.items():
-            if (now - entry.last_access) >= delta:
-                drop_ids.add(hist_id)
-
-        for hist_id in drop_ids:
+        for hist_id in histogrammer.prune_entries_older_than(now=now, age=delta):
             logger.info(
                 fmt_callback_logger_msg(
                     callback_method="prune_old_hists",
@@ -40,16 +35,14 @@ async def print_hists_stats(
     interval: timedelta = timedelta(seconds=5),
 ) -> None:
     while True:
-        if histogrammer._entries:
-            entries = list(histogrammer._entries.values())
-            nhists = len(entries)
-
+        entries = histogrammer.entries_snapshot()
+        if entries:
             logger.info(
                 fmt_callback_logger_msg(
                     callback_method="print_hists_stats",
                     msg=(
-                        f"using {bytes_repr(histogrammer._histogram_bytes(entries))} "
-                        f"with {nhists} hists"
+                        f"using {bytes_repr(histogrammer._histogram_bytes(list(entries)))} "
+                        f"with {len(entries)} hists"
                     ),
                 )
             )

@@ -4,7 +4,7 @@
 import grpc
 import warnings
 
-import histserv.protos.hist_pb2 as hist__pb2
+from . import hist_pb2 as hist__pb2
 
 GRPC_GENERATED_VERSION = "1.78.0"
 GRPC_VERSION = grpc.__version__
@@ -44,6 +44,12 @@ class HistogrammerServiceStub(object):
             response_deserializer=hist__pb2.InitResponse.FromString,
             _registered_method=True,
         )
+        self.Describe = channel.unary_unary(
+            "/HistogrammerService/Describe",
+            request_serializer=hist__pb2.DescribeRequest.SerializeToString,
+            response_deserializer=hist__pb2.DescribeResponse.FromString,
+            _registered_method=True,
+        )
         self.Exists = channel.unary_unary(
             "/HistogrammerService/Exists",
             request_serializer=hist__pb2.ExistsRequest.SerializeToString,
@@ -68,6 +74,12 @@ class HistogrammerServiceStub(object):
             response_deserializer=hist__pb2.DeleteResponse.FromString,
             _registered_method=True,
         )
+        self.Reset = channel.unary_unary(
+            "/HistogrammerService/Reset",
+            request_serializer=hist__pb2.ResetRequest.SerializeToString,
+            response_deserializer=hist__pb2.ResetResponse.FromString,
+            _registered_method=True,
+        )
         self.Flush = channel.unary_unary(
             "/HistogrammerService/Flush",
             request_serializer=hist__pb2.FlushRequest.SerializeToString,
@@ -87,6 +99,12 @@ class HistogrammerServiceServicer(object):
 
     def Init(self, request, context):
         """Sends a histogram initialization request"""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def Describe(self, request, context):
+        """Returns histogram metadata for reconnecting fill clients"""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
@@ -115,6 +133,12 @@ class HistogrammerServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def Reset(self, request, context):
+        """Resets a histogram on the server"""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
     def Flush(self, request, context):
         """Sends a flushing request (to disk)"""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -135,6 +159,11 @@ def add_HistogrammerServiceServicer_to_server(servicer, server):
             request_deserializer=hist__pb2.InitRequest.FromString,
             response_serializer=hist__pb2.InitResponse.SerializeToString,
         ),
+        "Describe": grpc.unary_unary_rpc_method_handler(
+            servicer.Describe,
+            request_deserializer=hist__pb2.DescribeRequest.FromString,
+            response_serializer=hist__pb2.DescribeResponse.SerializeToString,
+        ),
         "Exists": grpc.unary_unary_rpc_method_handler(
             servicer.Exists,
             request_deserializer=hist__pb2.ExistsRequest.FromString,
@@ -154,6 +183,11 @@ def add_HistogrammerServiceServicer_to_server(servicer, server):
             servicer.Delete,
             request_deserializer=hist__pb2.DeleteRequest.FromString,
             response_serializer=hist__pb2.DeleteResponse.SerializeToString,
+        ),
+        "Reset": grpc.unary_unary_rpc_method_handler(
+            servicer.Reset,
+            request_deserializer=hist__pb2.ResetRequest.FromString,
+            response_serializer=hist__pb2.ResetResponse.SerializeToString,
         ),
         "Flush": grpc.unary_unary_rpc_method_handler(
             servicer.Flush,
@@ -196,6 +230,36 @@ class HistogrammerService(object):
             "/HistogrammerService/Init",
             hist__pb2.InitRequest.SerializeToString,
             hist__pb2.InitResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def Describe(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/HistogrammerService/Describe",
+            hist__pb2.DescribeRequest.SerializeToString,
+            hist__pb2.DescribeResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -316,6 +380,36 @@ class HistogrammerService(object):
             "/HistogrammerService/Delete",
             hist__pb2.DeleteRequest.SerializeToString,
             hist__pb2.DeleteResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def Reset(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/HistogrammerService/Reset",
+            hist__pb2.ResetRequest.SerializeToString,
+            hist__pb2.ResetResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -2,18 +2,24 @@ from __future__ import annotations
 
 import json
 import typing as tp
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property
 from typing import TypedDict
 
 import grpc
+import numpy as np
 import uhi.io.json
+import hist
 from hist import Hist
 from hist.axis import NamedAxesTuple
 
+from histserv.chunked_hist import ChunkKey, ChunkScalar
 from histserv.protos import hist_pb2, hist_pb2_grpc
 from histserv.serialize import (
     deserialize_hist,
+    serialize_hist_storage,
     serialize_proto_Value,
     serialize_unique_id,
 )
@@ -41,6 +47,68 @@ class StatsDict(_StatsBaseDict, total=False):
     token_scoped: dict[str, TokenScopedStatsDict]
 
 
+@dataclass(frozen=True, slots=True)
+class FillPlan:
+    chunk_axis_names: tuple[str, ...]
+    dense_axes: tuple[tp.Any, ...]
+    storage_type: type[tp.Any]
+    name: str
+    label: str
+
+    @classmethod
+    def from_hist(cls, hist_obj: Hist) -> FillPlan:
+        chunk_axis_names = tuple(
+            axis.name
+            for axis in hist_obj.axes
+            if isinstance(axis, hist.axis.IntCategory | hist.axis.StrCategory)
+        )
+        dense_axes = tuple(
+            axis
+            for axis in hist_obj.axes
+            if not isinstance(axis, hist.axis.IntCategory | hist.axis.StrCategory)
+        )
+        return cls(
+            chunk_axis_names=chunk_axis_names,
+            dense_axes=dense_axes,
+            storage_type=type(hist_obj.storage_type()),
+            name=hist_obj.name or "",
+            label=hist_obj.label or "",
+        )
+
+    def split_fill_kwargs(
+        self, kwargs: Mapping[str, tp.Any]
+    ) -> tuple[ChunkKey, dict[str, tp.Any]]:
+        missing = [name for name in self.chunk_axis_names if name not in kwargs]
+        if missing:
+            raise ValueError(f"missing chunk axes in fill kwargs: {missing!r}")
+
+        chunk_key: list[ChunkScalar] = []
+        for name in self.chunk_axis_names:
+            value = kwargs[name]
+            if isinstance(value, np.generic):
+                value = value.item()
+            if not isinstance(value, str | int):
+                raise ValueError(
+                    f"categorical chunk axis {name!r} only accepts scalar int/str values"
+                )
+            chunk_key.append(value)
+
+        dense_kwargs = {
+            name: value
+            for name, value in kwargs.items()
+            if name not in self.chunk_axis_names
+        }
+        return tuple(chunk_key), dense_kwargs
+
+    def make_dense_hist(self) -> Hist:
+        return Hist(
+            *self.dense_axes,
+            storage=self.storage_type(),
+            name=self.name,
+            label=self.label,
+        )
+
+
 class Client:
     def __init__(self, address: str) -> None:
         self.address = address
@@ -48,6 +116,7 @@ class Client:
     def __getstate__(self):
         state = dict(self.__dict__)
         state.pop("channel", None)
+        state.pop("stub", None)
         return state
 
     def __enter__(self) -> Client:
@@ -67,7 +136,7 @@ class Client:
             ],
         )
 
-    @property
+    @cached_property
     def stub(self) -> hist_pb2_grpc.HistogrammerServiceStub:
         return hist_pb2_grpc.HistogrammerServiceStub(self.channel)
 
@@ -125,6 +194,7 @@ class Client:
             client=self,
             hist_id=ret.hist_id,
             token=token,
+            fill_plan=FillPlan.from_hist(hist),
         )
 
     def connect(self, hist_id: str, *, token: str | None = None) -> RemoteHist:
@@ -150,6 +220,7 @@ class Client:
             client=self,
             hist_id=hist_id,
             token=token,
+            fill_plan=None,
         )
 
     def stats(
@@ -223,17 +294,19 @@ class RemoteHist:
         >>> remote.snapshot(timeout=5)
     """
 
-    __slots__ = ("_client", "_hist_id", "_token")
+    __slots__ = ("_client", "_hist_id", "_token", "_fill_plan")
 
     def __init__(
         self,
         client: Client,
         hist_id: str,
         token: str | None = None,
+        fill_plan: FillPlan | None = None,
     ) -> None:
         self._client = client
         self._hist_id = hist_id
         self._token = token
+        self._fill_plan = fill_plan
 
     @property
     def client(self) -> Client:
@@ -249,6 +322,19 @@ class RemoteHist:
 
     def _metadata(self) -> tuple[tuple[str, str], ...] | None:
         return self.client._metadata(self.token)
+
+    def _require_fill_plan(self, *, timeout: int) -> FillPlan:
+        if self._fill_plan is None:
+            response = self.client.stub.Describe(
+                hist_pb2.DescribeRequest(hist_id=self.hist_id),
+                timeout=timeout,
+                metadata=self._metadata(),
+            )
+            hist_obj = Hist(
+                json.loads(response.hist_json, object_hook=uhi.io.json.object_hook)
+            )
+            self._fill_plan = FillPlan.from_hist(hist_obj)
+        return self._fill_plan
 
     def __repr__(self) -> str:
         return (
@@ -306,20 +392,23 @@ class RemoteHist:
             >>> isinstance(response, hist_pb2.FillResponse)
             True
         """
-        serialized_kwargs = {
-            key: serialize_proto_Value(value) for key, value in kwargs.items()
-        }
+        fill_plan = self._require_fill_plan(timeout=timeout)
+        chunk_key, dense_kwargs = fill_plan.split_fill_kwargs(kwargs)
+        dense_hist = fill_plan.make_dense_hist()
+        dense_hist.fill(**dense_kwargs)
+
+        request = hist_pb2.FillRequest(
+            hist_id=self.hist_id,
+            chunk_key={
+                name: serialize_proto_Value(value)
+                for name, value in zip(
+                    fill_plan.chunk_axis_names, chunk_key, strict=True
+                )
+            },
+            dense_storage=serialize_hist_storage(dense_hist),
+        )
         if unique_id is not None:
-            request = hist_pb2.FillRequest(
-                hist_id=self.hist_id,
-                unique_id=serialize_unique_id(unique_id),
-                kwargs=serialized_kwargs,
-            )
-        else:
-            request = hist_pb2.FillRequest(
-                hist_id=self.hist_id,
-                kwargs=serialized_kwargs,
-            )
+            request.unique_id = serialize_unique_id(unique_id)
         return self.client.stub.Fill(
             request,
             timeout=timeout,
@@ -426,6 +515,27 @@ class RemoteHist:
         """
         request = hist_pb2.DeleteRequest(hist_id=self.hist_id)
         return self.client.stub.Delete(
+            request,
+            timeout=timeout,
+            metadata=self._metadata(),
+        )
+
+    def reset(self, *, timeout: int = 10) -> hist_pb2.ResetResponse:
+        """Reset the remote histogram on the server.
+
+        Args:
+            timeout: RPC timeout in seconds.
+
+        Returns:
+            hist_pb2.ResetResponse: Empty response returned on success.
+
+        Example:
+            >>> response = remote.reset(timeout=5)
+            >>> isinstance(response, hist_pb2.ResetResponse)
+            True
+        """
+        request = hist_pb2.ResetRequest(hist_id=self.hist_id)
+        return self.client.stub.Reset(
             request,
             timeout=timeout,
             metadata=self._metadata(),
