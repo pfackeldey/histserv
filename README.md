@@ -16,10 +16,10 @@ conda install -c conda-forge histserv
 
 ## Quickstart
 
-Start gRPC server (or just `./example/start_server.sh`):
+Start the async gRPC server (or just `./example/start_server.sh`):
 ```shell
-histserv --port 50051 --n-threads 4
-# 2026-03-24 11:58:00.643 INFO:histserv:server (listening at [::]:50051) started with port=50051, n_threads=4, prune_after=24.00 h, prune_interval=5.00 min, stats_interval=5.00 s
+histserv --port 50051
+# 2026-03-26 11:58:00.643 INFO:histserv:server (listening at [::]:50051) started with port=50051, prune_after=24.00 h, prune_interval=5.00 min, stats_interval=5.00 s
 ```
 
 Then run:
@@ -35,7 +35,7 @@ H_local = Hist.new.Reg(30, -3, 3, name="x", label="x-axis").Double()
 with Client(address="[::]:50051") as client:
     # initialize it on the server and receive a remote hist to interact with it
     H_remote = client.init(H_local)
-    # fill the remote hist on the server
+    # fill the remote hist; the client pre-bins locally and sends dense storage
     H_remote.fill(x=np.random.normal(size=1000))
     # retrieve it back, drop it from the server & print it
     print(H_remote.snapshot(delete_from_server=True))
@@ -83,6 +83,15 @@ Output in ipython:
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
+`RemoteHist.fill(...)` no longer ships raw sample arrays to the server. The
+client builds a local dense histogram for the non-categorical axes, serializes
+only its storage, and the server merges that storage into the corresponding
+`ChunkedHist` chunk. This keeps the server simple and improves large-payload
+fills substantially.
+
+`Client.connect(...)` still only needs `hist_id` and an optional token. The
+client fetches histogram metadata lazily via the `Describe` RPC the first time a
+connected `RemoteHist` needs its fill plan.
 
 ## Examples
 
@@ -91,7 +100,7 @@ See `example/` for more examples.
 Run example client:
 ```shell
 python example/client.py
-# Remote hist initialized: RemoteHist<ID=52c77c93da8146f2a72c53af269d1ab5 @[::]:50051>
+# Remote hist initialized: RemoteHist(hist_id='52c77c93da8146f2a72c53af269d1ab5', address='[::]:50051', token=None)
 # Remote hist fill succeeded.
 # Snapshotting current hist: Hist(
 #   Regular(10, -2, 2, name='x', label='X Axis'),
@@ -103,17 +112,15 @@ python example/client.py
 # Remote hist flushed successfully to hist.h5.
 ```
 
-And the server logs additionally (after running the client script):
-```shell
-2026-03-24 11:58:29.113 INFO:histserv:RPC<Init> - initialized histogram (hist_id=52c77c93da8146f2a72c53af269d1ab5)
-2026-03-24 11:58:29.189 INFO:histserv:RPC<Fill> - filled with 24.00 MB of decompressed arrays (hist_id=52c77c93da8146f2a72c53af269d1ab5)
-2026-03-24 11:58:29.190 INFO:histserv:RPC<Snapshot> - created snapshot (hist_id=52c77c93da8146f2a72c53af269d1ab5)
-2026-03-24 11:58:29.237 INFO:histserv:RPC<Fill> - filled with 24.00 MB of decompressed arrays (hist_id=52c77c93da8146f2a72c53af269d1ab5)
-2026-03-24 11:58:29.282 INFO:histserv:RPC<Fill> - filled with 24.00 MB of decompressed arrays (hist_id=52c77c93da8146f2a72c53af269d1ab5)
-2026-03-24 11:58:29.336 INFO:histserv:RPC<Flush> - flushed histogram to hist.h5 (hist_id=52c77c93da8146f2a72c53af269d1ab5)
-```
-
 Or check out how to use remote histogram filling with an example coffea Processor in `example/coffea_processor.py`.
+
+Useful client methods on `RemoteHist`:
+- `fill(...)`
+- `snapshot(delete_from_server=False)`
+- `reset()`
+- `exists()`
+- `flush(destination="hist.h5")`
+- `delete()`
 
 ## Current supported types
 
@@ -131,11 +138,16 @@ Axis support:
 - `np.int64`
 - `np.int32`
 
+Notes:
+- Categorical axes (`IntCategory`, `StrCategory`) are treated as chunk keys and
+  must be filled with scalar values.
+- Non-categorical axes are pre-binned on the client before transmission.
+
 ## Developer Info
 
 ### Install
 ```shell
-uv pip install -e . --group=dev
+uv sync --dev
 ```
 
 ### Protobuf Codegen
@@ -143,7 +155,12 @@ uv pip install -e . --group=dev
 ```shell
 python -m grpc_tools.protoc -Isrc/histserv/protos --python_out=src/histserv/protos --pyi_out=src/histserv/protos --grpc_python_out=src/histserv/protos src/histserv/protos/hist.proto
 ```
-Maybe adjust imports in `src/histserv/protos/hist_pb2_grpc.py`.
+After regeneration, ensure `src/histserv/protos/hist_pb2_grpc.py` keeps the
+package-relative import:
+
+```python
+from . import hist_pb2 as hist__pb2
+```
 
 
 <!--Badge URLs-->
