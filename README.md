@@ -83,16 +83,6 @@ Output in ipython:
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-`RemoteHist.fill(...)` no longer ships raw sample arrays to the server. The
-client builds a local dense histogram for the non-categorical axes, serializes
-only its storage, and the server merges that storage into the corresponding
-`ChunkedHist` chunk. This keeps the server simple and improves large-payload
-fills substantially.
-
-`Client.connect(...)` still only needs `hist_id` and an optional token. The
-client fetches histogram metadata lazily via the `Describe` RPC the first time a
-connected `RemoteHist` needs its fill plan.
-
 ## Examples
 
 See `example/` for more examples.
