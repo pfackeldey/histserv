@@ -2,7 +2,6 @@ import datetime
 
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.protobuf.internal import containers as _containers
-from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from collections.abc import Iterable as _Iterable, Mapping as _Mapping
@@ -10,11 +9,61 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
-class InitRequest(_message.Message):
-    __slots__ = ("hist_json",)
+class ChunkPayload(_message.Message):
+    __slots__ = ("chunk_key", "dense_storage")
+    class ChunkKeyEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: Value
+        def __init__(
+            self,
+            key: _Optional[str] = ...,
+            value: _Optional[_Union[Value, _Mapping]] = ...,
+        ) -> None: ...
+
+    class DenseStorageEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: Value
+        def __init__(
+            self,
+            key: _Optional[str] = ...,
+            value: _Optional[_Union[Value, _Mapping]] = ...,
+        ) -> None: ...
+
+    CHUNK_KEY_FIELD_NUMBER: _ClassVar[int]
+    DENSE_STORAGE_FIELD_NUMBER: _ClassVar[int]
+    chunk_key: _containers.MessageMap[str, Value]
+    dense_storage: _containers.MessageMap[str, Value]
+    def __init__(
+        self,
+        chunk_key: _Optional[_Mapping[str, Value]] = ...,
+        dense_storage: _Optional[_Mapping[str, Value]] = ...,
+    ) -> None: ...
+
+class ChunkedHistPayload(_message.Message):
+    __slots__ = ("hist_json", "chunks")
     HIST_JSON_FIELD_NUMBER: _ClassVar[int]
+    CHUNKS_FIELD_NUMBER: _ClassVar[int]
     hist_json: str
-    def __init__(self, hist_json: _Optional[str] = ...) -> None: ...
+    chunks: _containers.RepeatedCompositeFieldContainer[ChunkPayload]
+    def __init__(
+        self,
+        hist_json: _Optional[str] = ...,
+        chunks: _Optional[_Iterable[_Union[ChunkPayload, _Mapping]]] = ...,
+    ) -> None: ...
+
+class InitRequest(_message.Message):
+    __slots__ = ("payload",)
+    PAYLOAD_FIELD_NUMBER: _ClassVar[int]
+    payload: ChunkedHistPayload
+    def __init__(
+        self, payload: _Optional[_Union[ChunkedHistPayload, _Mapping]] = ...
+    ) -> None: ...
 
 class InitResponse(_message.Message):
     __slots__ = ("hist_id",)
@@ -92,38 +141,54 @@ class FillResponse(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
 
+class FillManyRequest(_message.Message):
+    __slots__ = ("hist_id", "unique_id", "payload")
+    HIST_ID_FIELD_NUMBER: _ClassVar[int]
+    UNIQUE_ID_FIELD_NUMBER: _ClassVar[int]
+    PAYLOAD_FIELD_NUMBER: _ClassVar[int]
+    hist_id: str
+    unique_id: bytes
+    payload: ChunkedHistPayload
+    def __init__(
+        self,
+        hist_id: _Optional[str] = ...,
+        unique_id: _Optional[bytes] = ...,
+        payload: _Optional[_Union[ChunkedHistPayload, _Mapping]] = ...,
+    ) -> None: ...
+
+class ChunkSelector(_message.Message):
+    __slots__ = ("axis", "values")
+    AXIS_FIELD_NUMBER: _ClassVar[int]
+    VALUES_FIELD_NUMBER: _ClassVar[int]
+    axis: str
+    values: _containers.RepeatedCompositeFieldContainer[Value]
+    def __init__(
+        self,
+        axis: _Optional[str] = ...,
+        values: _Optional[_Iterable[_Union[Value, _Mapping]]] = ...,
+    ) -> None: ...
+
 class SnapshotRequest(_message.Message):
-    __slots__ = ("hist_id", "delete_from_server")
+    __slots__ = ("hist_id", "delete_from_server", "chunk_selectors")
     HIST_ID_FIELD_NUMBER: _ClassVar[int]
     DELETE_FROM_SERVER_FIELD_NUMBER: _ClassVar[int]
+    CHUNK_SELECTORS_FIELD_NUMBER: _ClassVar[int]
     hist_id: str
     delete_from_server: bool
+    chunk_selectors: _containers.RepeatedCompositeFieldContainer[ChunkSelector]
     def __init__(
-        self, hist_id: _Optional[str] = ..., delete_from_server: bool = ...
+        self,
+        hist_id: _Optional[str] = ...,
+        delete_from_server: bool = ...,
+        chunk_selectors: _Optional[_Iterable[_Union[ChunkSelector, _Mapping]]] = ...,
     ) -> None: ...
 
 class SnapshotResponse(_message.Message):
-    __slots__ = ("hist_json", "data")
-    class DataEntry(_message.Message):
-        __slots__ = ("key", "value")
-        KEY_FIELD_NUMBER: _ClassVar[int]
-        VALUE_FIELD_NUMBER: _ClassVar[int]
-        key: str
-        value: Value
-        def __init__(
-            self,
-            key: _Optional[str] = ...,
-            value: _Optional[_Union[Value, _Mapping]] = ...,
-        ) -> None: ...
-
-    HIST_JSON_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    hist_json: str
-    data: _containers.MessageMap[str, Value]
+    __slots__ = ("payload",)
+    PAYLOAD_FIELD_NUMBER: _ClassVar[int]
+    payload: ChunkedHistPayload
     def __init__(
-        self,
-        hist_json: _Optional[str] = ...,
-        data: _Optional[_Mapping[str, Value]] = ...,
+        self, payload: _Optional[_Union[ChunkedHistPayload, _Mapping]] = ...
     ) -> None: ...
 
 class DeleteRequest(_message.Message):
@@ -248,35 +313,18 @@ class TokenScopedStats(_message.Message):
         rpc_calls_total: _Optional[_Mapping[str, int]] = ...,
     ) -> None: ...
 
-class Dtype(_message.Message):
-    __slots__ = ("type",)
-    class Type(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-        __slots__ = ()
-        TYPE_DT_FLOAT32: _ClassVar[Dtype.Type]
-        TYPE_DT_FLOAT64: _ClassVar[Dtype.Type]
-        TYPE_DT_INT32: _ClassVar[Dtype.Type]
-        TYPE_DT_INT64: _ClassVar[Dtype.Type]
-
-    TYPE_DT_FLOAT32: Dtype.Type
-    TYPE_DT_FLOAT64: Dtype.Type
-    TYPE_DT_INT32: Dtype.Type
-    TYPE_DT_INT64: Dtype.Type
-    TYPE_FIELD_NUMBER: _ClassVar[int]
-    type: Dtype.Type
-    def __init__(self, type: _Optional[_Union[Dtype.Type, str]] = ...) -> None: ...
-
 class Ndarray(_message.Message):
     __slots__ = ("shape", "dtype", "data")
     SHAPE_FIELD_NUMBER: _ClassVar[int]
     DTYPE_FIELD_NUMBER: _ClassVar[int]
     DATA_FIELD_NUMBER: _ClassVar[int]
     shape: _containers.RepeatedScalarFieldContainer[int]
-    dtype: Dtype
+    dtype: str
     data: bytes
     def __init__(
         self,
         shape: _Optional[_Iterable[int]] = ...,
-        dtype: _Optional[_Union[Dtype, _Mapping]] = ...,
+        dtype: _Optional[str] = ...,
         data: _Optional[bytes] = ...,
     ) -> None: ...
 

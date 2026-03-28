@@ -30,7 +30,7 @@ if _version_not_supported:
 
 
 class HistogrammerServiceStub(object):
-    """The histogram service definition."""
+    """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
         """Constructor.
@@ -59,6 +59,12 @@ class HistogrammerServiceStub(object):
         self.Fill = channel.unary_unary(
             "/HistogrammerService/Fill",
             request_serializer=hist__pb2.FillRequest.SerializeToString,
+            response_deserializer=hist__pb2.FillResponse.FromString,
+            _registered_method=True,
+        )
+        self.FillMany = channel.unary_unary(
+            "/HistogrammerService/FillMany",
+            request_serializer=hist__pb2.FillManyRequest.SerializeToString,
             response_deserializer=hist__pb2.FillResponse.FromString,
             _registered_method=True,
         )
@@ -95,58 +101,64 @@ class HistogrammerServiceStub(object):
 
 
 class HistogrammerServiceServicer(object):
-    """The histogram service definition."""
+    """Missing associated documentation comment in .proto file."""
 
     def Init(self, request, context):
-        """Sends a histogram initialization request"""
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
     def Describe(self, request, context):
-        """Returns histogram metadata for reconnecting fill clients"""
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
     def Exists(self, request, context):
-        """Checks whether a histogram exists and is accessible"""
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
     def Fill(self, request, context):
-        """Sends a filling request"""
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def FillMany(self, request, context):
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
     def Snapshot(self, request, context):
-        """Sends a snapshot request of the current histogram"""
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
     def Delete(self, request, context):
-        """Deletes a histogram from the server"""
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
     def Reset(self, request, context):
-        """Resets a histogram on the server"""
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
     def Flush(self, request, context):
-        """Sends a flushing request (to disk)"""
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
     def Stats(self, request, context):
-        """Returns a point-in-time snapshot of server stats"""
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
@@ -172,6 +184,11 @@ def add_HistogrammerServiceServicer_to_server(servicer, server):
         "Fill": grpc.unary_unary_rpc_method_handler(
             servicer.Fill,
             request_deserializer=hist__pb2.FillRequest.FromString,
+            response_serializer=hist__pb2.FillResponse.SerializeToString,
+        ),
+        "FillMany": grpc.unary_unary_rpc_method_handler(
+            servicer.FillMany,
+            request_deserializer=hist__pb2.FillManyRequest.FromString,
             response_serializer=hist__pb2.FillResponse.SerializeToString,
         ),
         "Snapshot": grpc.unary_unary_rpc_method_handler(
@@ -209,7 +226,7 @@ def add_HistogrammerServiceServicer_to_server(servicer, server):
 
 # This class is part of an EXPERIMENTAL API.
 class HistogrammerService(object):
-    """The histogram service definition."""
+    """Missing associated documentation comment in .proto file."""
 
     @staticmethod
     def Init(
@@ -319,6 +336,36 @@ class HistogrammerService(object):
             target,
             "/HistogrammerService/Fill",
             hist__pb2.FillRequest.SerializeToString,
+            hist__pb2.FillResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def FillMany(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/HistogrammerService/FillMany",
+            hist__pb2.FillManyRequest.SerializeToString,
             hist__pb2.FillResponse.FromString,
             options,
             channel_credentials,

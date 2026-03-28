@@ -37,8 +37,9 @@ with Client(address="[::]:50051") as client:
     H_remote = client.init(H_local)
     # fill the remote hist; the client pre-bins locally and sends dense storage
     H_remote.fill(x=np.random.normal(size=1000))
-    # retrieve it back, drop it from the server & print it
-    print(H_remote.snapshot(delete_from_server=True))
+    # retrieve it back as a ChunkedHist, drop it from the server, and materialize it locally
+    H_snapshot = H_remote.snapshot(delete_from_server=True)
+    print(H_snapshot.to_hist())
 
 
 # local hist hasn't been filled
@@ -92,11 +93,7 @@ Run example client:
 python example/client.py
 # Remote hist initialized: RemoteHist(hist_id='52c77c93da8146f2a72c53af269d1ab5', address='[::]:50051', token=None)
 # Remote hist fill succeeded.
-# Snapshotting current hist: Hist(
-#   Regular(10, -2, 2, name='x', label='X Axis'),
-#   Regular(10, -2, 2, name='y', label='Y Axis'),
-#   StrCategory(['data', 'drell-yan'], growth=True, name='dataset', label='Dataset'),
-#   storage=Weight()) # Sum: WeightedSum(value=911503, variance=911503) (WeightedSum(value=1e+06, variance=1e+06) with flow)
+# Snapshotting current hist: ChunkedHist(...)
 # Remote hist fill succeeded.
 # Remote hist fill succeeded.
 # Remote hist flushed successfully to hist.h5.
@@ -106,32 +103,44 @@ Or check out how to use remote histogram filling with an example coffea Processo
 
 Useful client methods on `RemoteHist`:
 - `fill(...)`
+- `fill_many([...])`
 - `snapshot(delete_from_server=False)`
 - `reset()`
 - `exists()`
+- `get_connection_info()`
 - `flush(destination="hist.h5")`
 - `delete()`
 
 ## Current supported types
 
 Axis support:
-- `hist.axis.Regular`
+- `hist.axis.Regular` without transforms
 - `hist.axis.Boolean`
 - `hist.axis.Variable`
 - `hist.axis.Integer`
 - `hist.axis.IntCategory`
 - `hist.axis.StrCategory`
 
-`np.dtype` support for `hist.axis.{Regular,Variable,Integer}`:
-- `np.float64`
-- `np.float32`
-- `np.int64`
-- `np.int32`
+Storage support:
+- `hist.storage.Double`
+- `hist.storage.Int64`
+- `boost_histogram.storage.AtomicInt64`
+- `hist.storage.Weight`
+- `boost_histogram.storage.Unlimited`
+
+Unsupported today:
+- transformed `hist.axis.Regular`
+- `boost_histogram.storage.Mean`
+- `boost_histogram.storage.WeightedMean`
 
 Notes:
 - Categorical axes (`IntCategory`, `StrCategory`) are treated as chunk keys and
   must be filled with scalar values.
-- Non-categorical axes are pre-binned on the client before transmission.
+- `RemoteHist.snapshot()` returns a `ChunkedHist`; call `.to_hist()` to
+  materialize a local `hist.Hist`.
+- `fill_many(...)` is useful for bundling several fills into one gRPC request.
+- Dense ndarray transport is generic over NumPy dtypes, but object arrays are
+  not supported on the wire.
 
 ## Developer Info
 

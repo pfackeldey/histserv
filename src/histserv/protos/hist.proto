@@ -2,34 +2,33 @@ syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
 
-// The histogram service definition.
 service HistogrammerService {
-  // Sends a histogram initialization request
   rpc Init(InitRequest) returns (InitResponse) {}
-  // Returns histogram metadata for reconnecting fill clients
   rpc Describe(DescribeRequest) returns (DescribeResponse) {}
-  // Checks whether a histogram exists and is accessible
   rpc Exists(ExistsRequest) returns (ExistsResponse) {}
-  // Sends a filling request
   rpc Fill(FillRequest) returns (FillResponse) {}
-  // Sends a snapshot request of the current histogram
+  rpc FillMany(FillManyRequest) returns (FillResponse) {}
   rpc Snapshot(SnapshotRequest) returns (SnapshotResponse) {}
-  // Deletes a histogram from the server
   rpc Delete(DeleteRequest) returns (DeleteResponse) {}
-  // Resets a histogram on the server
   rpc Reset(ResetRequest) returns (ResetResponse) {}
-  // Sends a flushing request (to disk)
   rpc Flush(FlushRequest) returns (FlushResponse) {}
-  // Returns a point-in-time snapshot of server stats
   rpc Stats(StatsRequest) returns (StatsResponse) {}
 }
 
-// This request sends JSON payload to initialize the histogram on the server
-message InitRequest {
-  string hist_json = 1;
+message ChunkPayload {
+  map<string, Value> chunk_key = 1;
+  map<string, Value> dense_storage = 2;
 }
 
-// The response message
+message ChunkedHistPayload {
+  string hist_json = 1;
+  repeated ChunkPayload chunks = 2;
+}
+
+message InitRequest {
+  ChunkedHistPayload payload = 1;
+}
+
 message InitResponse {
   string hist_id = 1;
 }
@@ -50,7 +49,6 @@ message ExistsResponse {
   bool exists = 1;
 }
 
-// The request message containing the pre-binned values to merge into a chunk.
 message FillRequest {
   string hist_id = 1;
   optional bytes unique_id = 2;
@@ -60,16 +58,25 @@ message FillRequest {
 
 message FillResponse {}
 
-// This request sends JSON payload to initialize the histogram on the server
+message FillManyRequest {
+  string hist_id = 1;
+  optional bytes unique_id = 2;
+  ChunkedHistPayload payload = 3;
+}
+
+message ChunkSelector {
+  string axis = 1;
+  repeated Value values = 2;
+}
+
 message SnapshotRequest {
   string hist_id = 1;
   bool delete_from_server = 2;
+  repeated ChunkSelector chunk_selectors = 3;
 }
 
-// The response message
 message SnapshotResponse {
-  string hist_json = 1;
-  map<string, Value> data = 2;
+  ChunkedHistPayload payload = 1;
 }
 
 message DeleteRequest {
@@ -84,10 +91,9 @@ message ResetRequest {
 
 message ResetResponse {}
 
-// The request message for flushing the histogram.
 message FlushRequest {
   string hist_id = 1;
-  string destination = 2; // where to flush the histogram data
+  string destination = 2;
 }
 
 message FlushResponse {}
@@ -113,31 +119,17 @@ message TokenScopedStats {
   map<string, uint64> rpc_calls_total = 3;
 }
 
-// Data type representation (just a small subset for now)
-message Dtype {
-  enum Type {
-    // add more types as needed
-    TYPE_DT_FLOAT32 = 0;
-    TYPE_DT_FLOAT64 = 1;
-    TYPE_DT_INT32 = 2;
-    TYPE_DT_INT64 = 3;
-  }
-
-  Type type = 2;
-}
-
-// A simple representation of a NumPy ndarray (we're ignoring endianness and other complexities for brevity)
 message Ndarray {
   repeated int64 shape = 1;
-  Dtype dtype = 2;
+  string dtype = 2;
   bytes data = 3;
 }
 
 message Value {
   oneof value {
-    Ndarray array_value = 1; // for array values (e.g., regular/variable/integer axes)
-    string string_value = 2; // for string values (e.g., str category axes)
-    int64 int_value = 3; // for integer values (e.g., int category axes)
-    bool bool_value = 4; // for boolean values (e.g., boolean axes axes)
+    Ndarray array_value = 1;
+    string string_value = 2;
+    int64 int_value = 3;
+    bool bool_value = 4;
   }
 }
