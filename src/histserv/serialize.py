@@ -14,7 +14,7 @@ DEFAULT_CODEC = numcodecs.Blosc(
     clevel=1,
     shuffle=numcodecs.Blosc.BITSHUFFLE,
 )
-COMPRESSION_THRESHOLD_BYTES = 1024
+COMPRESSION_THRESHOLD_BYTES = 16
 
 
 def serialize_nparray(item: np.ndarray | list | tuple) -> hist_pb2.Ndarray:

@@ -17,10 +17,12 @@ import uhi.io.json
 
 from histserv.protos import hist_pb2
 from histserv.serialize import (
+    COMPRESSION_THRESHOLD_BYTES,
     DEFAULT_CODEC,
     deserialize_proto_Value,
     serialize_proto_Value,
 )
+from histserv.util import bytes_repr
 
 ChunkScalar = str | int
 ChunkKey = tuple[ChunkScalar, ...]
@@ -155,6 +157,7 @@ class ChunkedHist:
     codec: numcodecs.abc.Codec
     _dense_view_shape: tuple[int, ...] = field(init=False)
     _dense_view_dtype: np.dtype[tp.Any] = field(init=False)
+    _dense_view_nbytes: int = field(init=False)
     _storage_field_map: dict[str, str] = field(init=False)
     _scratch_dense_hist: hist.Hist = field(init=False)
     _chunks: dict[ChunkKey, np.ndarray | bytes] = field(default_factory=dict)
@@ -230,6 +233,7 @@ class ChunkedHist:
         dense_view = self._scratch_dense_hist.view(flow=True)
         self._dense_view_shape = dense_view.shape
         self._dense_view_dtype = dense_view.dtype
+        self._dense_view_nbytes = dense_view.nbytes
 
         storage_fields = _storage_to_dict(self.storage_type(), dense_view)
         storage_array_keys = tuple(
@@ -330,7 +334,11 @@ class ChunkedHist:
         payload = self._chunks.get(key)
         if payload is None:
             return None
-        decoded = self.codec.decode(tp.cast(bytes, payload))
+        decoded = (
+            tp.cast(bytes, payload)
+            if self._dense_view_nbytes <= COMPRESSION_THRESHOLD_BYTES
+            else self.codec.decode(tp.cast(bytes, payload))
+        )
         return (
             np.frombuffer(decoded, dtype=self.dense_view_dtype)
             .reshape(self.dense_view_shape)
@@ -343,10 +351,21 @@ class ChunkedHist:
             shape=self.dense_view_shape,
             dtype=self.dense_view_dtype,
         )
-        self._chunks[key] = self.codec.encode(array)
+        payload = array.tobytes()
+        self._chunks[key] = (
+            payload
+            if self._dense_view_nbytes <= COMPRESSION_THRESHOLD_BYTES
+            else self.codec.encode(payload)
+        )
 
     def _save_chunk_view_unchecked(self, key: ChunkKey, chunk_view: np.ndarray) -> None:
-        self._chunks[key] = self.codec.encode(chunk_view)
+        array = np.asarray(chunk_view, order="C")
+        payload = array.tobytes()
+        self._chunks[key] = (
+            payload
+            if self._dense_view_nbytes <= COMPRESSION_THRESHOLD_BYTES
+            else self.codec.encode(payload)
+        )
 
     def _remember_chunk_key(self, key: ChunkKey) -> None:
         for spec, key_part in zip(self.chunk_axes, key, strict=True):
@@ -666,6 +685,23 @@ class ChunkedHist:
 
     def __contains__(self, key: object) -> bool:
         return key in self._chunks
+
+    def __repr__(self) -> str:
+        axes_repr = ",\n  ".join(
+            (
+                f"{type(axis).__name__}(..., growth={axis.traits.growth}, "
+                f"name={axis.name!r}, label={axis.label!r})"
+            )
+            if isinstance(axis, bh.axis.IntCategory | bh.axis.StrCategory)
+            else repr(axis)
+            for axis in self.axes
+        )
+        return (
+            "ChunkedHist(\n"
+            f"  {axes_repr},\n"
+            f"  storage={self.storage_type()!r})"
+            f" # Chunks: {len(self)}, Bytes: {bytes_repr(self.histogram_bytes())}"
+        )
 
     def __iadd__(self, other: ChunkedHist | hist.Hist) -> ChunkedHist:
         """Merge another compatible histogram into this one in place.
