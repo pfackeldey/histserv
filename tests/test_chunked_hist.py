@@ -6,6 +6,10 @@ import numpy as np
 import pytest
 
 from histserv.chunked_hist import ChunkedHist
+from histserv.serialize import (
+    deserialize_chunked_hist_payload,
+    serialize_chunked_hist_payload,
+)
 from tests.histogram_fixtures import CategoricalHistCase, categorical_hist_cases
 
 
@@ -106,7 +110,7 @@ def test_chunked_hist_proto_payload_round_trips_existing_yields() -> None:
         weight=np.array([3.0], dtype=np.float64),
     )
 
-    restored = ChunkedHist.from_proto_payload(source.to_proto_payload())
+    restored = deserialize_chunked_hist_payload(serialize_chunked_hist_payload(source))
     np.testing.assert_equal(
         restored.to_hist().view(flow=True),
         source.to_hist().view(flow=True),

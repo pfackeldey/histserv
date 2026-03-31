@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 import grpc
 from hist import Hist
@@ -17,7 +17,13 @@ from histserv.chunked_hist import (
     normalize_chunk_selection,
 )
 from histserv.protos import hist_pb2, hist_pb2_grpc
-from histserv.serialize import serialize_proto_Value, serialize_unique_id
+from histserv.serialize import (
+    deserialize_chunked_hist_payload,
+    serialize_chunk_payload,
+    serialize_chunk_scalar,
+    serialize_chunked_hist_payload,
+    serialize_unique_id,
+)
 
 
 class TokenScopedStatsDict(TypedDict):
@@ -42,8 +48,24 @@ class StatsDict(_StatsBaseDict, total=False):
     token_scoped: TokenScopedStatsDict
 
 
+FillCompression = Literal["zstd"]
+
+
+def _resolve_fill_compression(
+    compression: FillCompression | None,
+) -> hist_pb2.CompressionCodec.ValueType:
+    if compression is None:
+        return hist_pb2.COMPRESSION_CODEC_NONE
+    if compression == "zstd":
+        return hist_pb2.COMPRESSION_CODEC_ZSTD
+    raise ValueError(f"unsupported fill compression: {compression!r}")
+
+
 class Client:
-    def __init__(self, address: str) -> None:
+    def __init__(
+        self,
+        address: str,
+    ) -> None:
         """Create a client connected to a histserv gRPC endpoint.
 
         Args:
@@ -116,7 +138,11 @@ class Client:
             raise ValueError("all axes must be named")
 
         response = self.stub.Init(
-            hist_pb2.InitRequest(payload=chunked.to_proto_payload()),
+            hist_pb2.InitRequest(
+                payload=serialize_chunked_hist_payload(
+                    chunked,
+                )
+            ),
             timeout=timeout,
             metadata=self._metadata(token),
         )
@@ -288,6 +314,7 @@ class RemoteHist:
         *,
         timeout: int = 10,
         unique_id: tp.Any | None = None,
+        compression: FillCompression | None = None,
         **kwargs: tp.Any,
     ) -> hist_pb2.FillResponse:
         """Fill one remote chunk.
@@ -295,6 +322,10 @@ class RemoteHist:
         Args:
             timeout: RPC timeout in seconds.
             unique_id: Optional idempotency key for the fill request.
+            compression: Optional dense payload compression for this RPC.
+                Use `None` (default) for no compression. Use `"zstd"` to
+                reduce bandwidth at the cost of lower throughput and higher
+                latency.
             **kwargs: Named axis values and optional storage arguments such as
                 `weight` or `sample`.
 
@@ -304,22 +335,22 @@ class RemoteHist:
         Example:
             >>> remote_hist.fill(x=[0.2, 0.4], cat="a")
         """
+        dense_view_codec = _resolve_fill_compression(compression)
         chunk_key, dense_kwargs = self._template.split_fill_kwargs(kwargs)
         dense_hist = self._make_dense_hist()
         dense_hist.fill(**dense_kwargs)
+        chunk = serialize_chunk_payload(
+            chunk_key,
+            dense_hist.view(flow=True),
+            shape=self._template.dense_view_shape,
+            dtype=self._template.dense_view_dtype,
+            codec=dense_view_codec,
+        )
         request = hist_pb2.FillRequest(
             hist_id=self.hist_id,
-            chunk_key={
-                axis_name: serialize_proto_Value(value)
-                for axis_name, value in zip(
-                    self._template.chunk_axis_names,
-                    chunk_key,
-                    strict=True,
-                )
-            },
-            dense_storage=self._template.serialize_dense_view(
-                dense_hist.view(flow=True)
-            ),
+            chunk_key=chunk.chunk_key,
+            dense_view=chunk.dense_view,
+            dense_view_codec=dense_view_codec,
         )
         if unique_id is not None:
             request.unique_id = serialize_unique_id(unique_id)
@@ -335,6 +366,7 @@ class RemoteHist:
         *,
         timeout: int = 10,
         unique_id: tp.Any | None = None,
+        compression: FillCompression | None = None,
     ) -> hist_pb2.FillResponse:
         """Fill multiple remote chunks in a single request.
 
@@ -345,6 +377,10 @@ class RemoteHist:
             fills: Iterable of fill keyword-argument mappings.
             timeout: RPC timeout in seconds.
             unique_id: Optional idempotency key for the fill-many request.
+            compression: Optional dense payload compression for this RPC.
+                Use `None` (default) for no compression. Use `"zstd"` to
+                reduce bandwidth at the cost of lower throughput and higher
+                latency.
 
         Returns:
             The gRPC fill response.
@@ -357,11 +393,12 @@ class RemoteHist:
             ...     ]
             ... )
         """
+        dense_view_codec = _resolve_fill_compression(compression)
         fills_list = list(fills)
         split_fills = [
             self._template.split_fill_kwargs(fill_kwargs) for fill_kwargs in fills_list
         ]
-        chunked = self._template.empty_like()
+        chunks: list[hist_pb2.ChunkPayload] = []
         if fills_list:
             first_fill_axes = set(fills_list[0])
             if not all(
@@ -374,12 +411,21 @@ class RemoteHist:
             for chunk_key, dense_kwargs in split_fills:
                 try:
                     dense_hist.fill(**dense_kwargs)
-                    chunked.add_dense_view(chunk_key, dense_view)
+                    chunks.append(
+                        serialize_chunk_payload(
+                            chunk_key,
+                            dense_view,
+                            shape=self._template.dense_view_shape,
+                            dtype=self._template.dense_view_dtype,
+                            codec=dense_view_codec,
+                        )
+                    )
                 finally:
                     _zero_dense_view(dense_view)
         request = hist_pb2.FillManyRequest(
             hist_id=self.hist_id,
-            payload=chunked.to_proto_payload(),
+            chunks=chunks,
+            dense_view_codec=dense_view_codec,
         )
         if unique_id is not None:
             request.unique_id = serialize_unique_id(unique_id)
@@ -436,7 +482,7 @@ class RemoteHist:
             timeout=timeout,
             metadata=self._metadata(),
         )
-        return ChunkedHist.from_proto_payload(response.payload)
+        return deserialize_chunked_hist_payload(response.payload)
 
     def flush(
         self,
@@ -534,7 +580,7 @@ class RemoteHistSlice:
                 chunk_selectors=[
                     hist_pb2.ChunkSelector(
                         axis=axis_name,
-                        values=[serialize_proto_Value(value) for value in values],
+                        values=[serialize_chunk_scalar(value) for value in values],
                     )
                     for axis_name, values in self.selection.items()
                 ],
@@ -542,4 +588,4 @@ class RemoteHistSlice:
             timeout=timeout,
             metadata=self.remote._metadata(),
         )
-        return ChunkedHist.from_proto_payload(response.payload)
+        return deserialize_chunked_hist_payload(response.payload)

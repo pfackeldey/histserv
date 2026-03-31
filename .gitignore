@@ -20,3 +20,6 @@ uv.lock
 # example output
 hist.coffea
 hist.h5
+
+# other
+ideas/

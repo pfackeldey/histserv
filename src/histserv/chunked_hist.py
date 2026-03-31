@@ -11,17 +11,9 @@ from boost_histogram.serialization._axis import _axis_from_dict, _axis_to_dict
 from boost_histogram.serialization._common import serialize_metadata
 from boost_histogram.serialization._storage import _storage_from_dict, _storage_to_dict
 import hist
-import numcodecs.abc
 import numpy as np
 import uhi.io.json
 
-from histserv.protos import hist_pb2
-from histserv.serialize import (
-    COMPRESSION_THRESHOLD_BYTES,
-    DEFAULT_CODEC,
-    deserialize_proto_Value,
-    serialize_proto_Value,
-)
 from histserv.util import bytes_repr
 
 ChunkScalar = str | int
@@ -154,13 +146,12 @@ class ChunkedHist:
     storage_type: type[tp.Any]
     name: str
     label: str
-    codec: numcodecs.abc.Codec
     _dense_view_shape: tuple[int, ...] = field(init=False)
     _dense_view_dtype: np.dtype[tp.Any] = field(init=False)
     _dense_view_nbytes: int = field(init=False)
-    _storage_field_map: dict[str, str] = field(init=False)
+    _chunk_axis_names: tuple[str, ...] = field(init=False)
     _scratch_dense_hist: hist.Hist = field(init=False)
-    _chunks: dict[ChunkKey, np.ndarray | bytes] = field(default_factory=dict)
+    _chunks: dict[ChunkKey, np.ndarray] = field(default_factory=dict)
 
     def __init__(
         self,
@@ -168,7 +159,6 @@ class ChunkedHist:
         storage: tp.Any | None = None,
         name: str = "",
         label: str = "",
-        codec: numcodecs.abc.Codec | None = None,
     ) -> None:
         """Initialize a chunked histogram.
 
@@ -177,8 +167,6 @@ class ChunkedHist:
             storage: Boost-histogram storage instance. Defaults to `Double()`.
             name: Histogram name.
             label: Histogram label.
-            codec: Chunk compression codec. Defaults to the project codec.
-
         Example:
             >>> h = ChunkedHist(
             ...     hist.axis.Regular(10, 0, 1, name="x"),
@@ -192,8 +180,6 @@ class ChunkedHist:
             raise ValueError("all axes must have names")
         if storage is None:
             storage = bh.storage.Double()
-        if codec is None:
-            codec = DEFAULT_CODEC
         for axis in axes:
             _validate_supported_axis(axis)
         _validate_supported_storage(storage)
@@ -202,7 +188,6 @@ class ChunkedHist:
         self.storage_type = type(storage)
         self.name = name
         self.label = label
-        self.codec = codec
         self._chunks = {}
 
         self.chunk_axes = []
@@ -224,6 +209,8 @@ class ChunkedHist:
             else:
                 dense_axes.append(axis)
 
+        self._chunk_axis_names = tuple(spec.name for spec in self.chunk_axes)
+
         self._scratch_dense_hist = hist.Hist(
             *dense_axes,
             storage=self.storage_type(),
@@ -235,44 +222,15 @@ class ChunkedHist:
         self._dense_view_dtype = dense_view.dtype
         self._dense_view_nbytes = dense_view.nbytes
 
-        storage_fields = _storage_to_dict(self.storage_type(), dense_view)
-        storage_array_keys = tuple(
-            key
-            for key, value in storage_fields.items()
-            if isinstance(value, np.ndarray)
-        )
-        if self._dense_view_dtype.fields is None:
-            self._storage_field_map = {"values": ""}
-        else:
-            remaining_fields = list(self._dense_view_dtype.names or ())
-            field_map: dict[str, str] = {}
-            deferred: list[str] = []
-            for storage_key in storage_array_keys:
-                singular = (
-                    storage_key[:-1] if storage_key.endswith("s") else storage_key
-                )
-                if singular in remaining_fields:
-                    field_map[storage_key] = singular
-                    remaining_fields.remove(singular)
-                else:
-                    deferred.append(storage_key)
-            for storage_key, field_name in zip(deferred, remaining_fields, strict=True):
-                field_map[storage_key] = field_name
-            self._storage_field_map = field_map
-
     @classmethod
     def from_hist(
         cls,
         source: hist.Hist,
-        *,
-        codec: numcodecs.abc.Codec | None = None,
     ) -> ChunkedHist:
         """Build a `ChunkedHist` from an existing `hist.Hist`.
 
         Args:
             source: Source histogram to copy into chunked storage.
-            codec: Chunk compression codec. Defaults to the project codec.
-
         Returns:
             A new `ChunkedHist` containing the same bin contents.
 
@@ -289,11 +247,10 @@ class ChunkedHist:
             storage=type(source.storage_type())(),
             name=source.name or "",
             label=source.label or "",
-            codec=codec,
         )
         source_view = source.view(flow=True)
         if not chunked.chunk_axes:
-            chunked._save_chunk_view((), np.asarray(source_view))
+            chunked._save_chunk_view((), np.ascontiguousarray(source_view))
             return chunked
 
         if not any(spec.known_keys for spec in chunked.chunk_axes):
@@ -309,14 +266,14 @@ class ChunkedHist:
                 key_values.append(spec.known_keys[key_index])
             chunked._save_chunk_view(
                 tuple(key_values),
-                np.asarray(source_view[tuple(selector)]),
+                np.ascontiguousarray(source_view[tuple(selector)]),
             )
 
         return chunked
 
     @property
     def chunk_axis_names(self) -> tuple[str, ...]:
-        return tuple(spec.name for spec in self.chunk_axes)
+        return self._chunk_axis_names
 
     @property
     def dense_view_shape(self) -> tuple[int, ...]:
@@ -330,42 +287,15 @@ class ChunkedHist:
     def dense_axes(self) -> tuple[tp.Any, ...]:
         return tuple(self._scratch_dense_hist.axes)
 
-    def _load_chunk_view(self, key: ChunkKey) -> np.ndarray | None:
-        payload = self._chunks.get(key)
-        if payload is None:
-            return None
-        decoded = (
-            tp.cast(bytes, payload)
-            if self._dense_view_nbytes <= COMPRESSION_THRESHOLD_BYTES
-            else self.codec.decode(tp.cast(bytes, payload))
-        )
-        return (
-            np.frombuffer(decoded, dtype=self.dense_view_dtype)
-            .reshape(self.dense_view_shape)
-            .copy()
-        )
-
     def _save_chunk_view(self, key: ChunkKey, chunk_view: np.ndarray) -> None:
         array = _validate_dense_view(
-            np.array(chunk_view, copy=True, order="C"),
+            np.ascontiguousarray(chunk_view),
             shape=self.dense_view_shape,
             dtype=self.dense_view_dtype,
         )
-        payload = array.tobytes()
-        self._chunks[key] = (
-            payload
-            if self._dense_view_nbytes <= COMPRESSION_THRESHOLD_BYTES
-            else self.codec.encode(payload)
-        )
-
-    def _save_chunk_view_unchecked(self, key: ChunkKey, chunk_view: np.ndarray) -> None:
-        array = np.asarray(chunk_view, order="C")
-        payload = array.tobytes()
-        self._chunks[key] = (
-            payload
-            if self._dense_view_nbytes <= COMPRESSION_THRESHOLD_BYTES
-            else self.codec.encode(payload)
-        )
+        if not array.flags.writeable:
+            array = array.copy()
+        self._chunks[key] = array
 
     def _remember_chunk_key(self, key: ChunkKey) -> None:
         for spec, key_part in zip(self.chunk_axes, key, strict=True):
@@ -400,13 +330,12 @@ class ChunkedHist:
             shape=self.dense_view_shape,
             dtype=self.dense_view_dtype,
         )
-        chunk_view = self._load_chunk_view(key)
+        chunk_view = self._chunks.get(key)
         if chunk_view is None:
             self._save_chunk_view(key, dense_view)
             self._remember_chunk_key(key)
             return
         _accumulate_dense_view(chunk_view, dense_view)
-        self._save_chunk_view_unchecked(key, chunk_view)
 
     def fill(self, **kwargs: tp.Any) -> None:
         """Fill one chunk of the histogram.
@@ -426,12 +355,16 @@ class ChunkedHist:
         dense_hist = self._scratch_dense_hist
         dense_view = dense_hist.view(flow=True)
         try:
-            chunk_view = self._load_chunk_view(chunk_key)
+            chunk_view = self._chunks.get(chunk_key)
             if chunk_view is not None:
                 dense_view[...] = chunk_view
             dense_hist.fill(**dense_kwargs)
-            self._save_chunk_view_unchecked(chunk_key, np.asarray(dense_view))
-            self._remember_chunk_key(chunk_key)
+            existing = self._chunks.get(chunk_key)
+            if existing is None:
+                self._save_chunk_view(chunk_key, dense_view.copy(order="C"))
+                self._remember_chunk_key(chunk_key)
+            else:
+                existing[...] = dense_view
         finally:
             _zero_dense_view(dense_view)
 
@@ -484,7 +417,7 @@ class ChunkedHist:
             for spec in self.chunk_axes
         ]
 
-        for key, chunk_view in self.items():
+        for key, chunk_view in self._chunks.items():
             selector: list[tp.Any] = [slice(None)] * merged_view.ndim
             for spec, axis_map, key_part in zip(
                 self.chunk_axes, axis_key_to_index, key, strict=True
@@ -519,8 +452,6 @@ class ChunkedHist:
     def from_metadata_json(
         cls,
         metadata: str,
-        *,
-        codec: numcodecs.abc.Codec | None = None,
     ) -> ChunkedHist:
         payload = json.loads(metadata)
         axes = tuple(_axis_from_dict(axis_dict) for axis_dict in payload["axes"])
@@ -530,7 +461,6 @@ class ChunkedHist:
             storage=storage,
             name=payload.get("metadata", {}).get("name", ""),
             label=payload.get("metadata", {}).get("label", ""),
-            codec=codec,
         )
 
     def empty_like(self) -> ChunkedHist:
@@ -539,14 +469,11 @@ class ChunkedHist:
             storage=self.storage_type(),
             name=self.name,
             label=self.label,
-            codec=self.codec,
         )
 
     def items(self) -> Iterable[tuple[ChunkKey, np.ndarray]]:
-        for key in self._chunks:
-            chunk_view = self._load_chunk_view(key)
-            assert chunk_view is not None
-            yield key, chunk_view
+        for key, chunk_view in self._chunks.items():
+            yield key, np.ascontiguousarray(chunk_view)
 
     def _keys_by_axis(
         self,
@@ -560,73 +487,6 @@ class ChunkedHist:
             axis_name: list(dict.fromkeys(values))
             for axis_name, values in key_lists.items()
         }
-
-    def serialize_dense_view(
-        self,
-        dense_view: np.ndarray,
-    ) -> dict[str, hist_pb2.Value]:
-        array = np.asarray(dense_view)
-        if array.dtype.fields is None:
-            return {"values": serialize_proto_Value(array)}
-        return {
-            storage_key: serialize_proto_Value(array[field_name])
-            for storage_key, field_name in self._storage_field_map.items()
-        }
-
-    def deserialize_dense_view(
-        self,
-        contents: Mapping[str, hist_pb2.Value],
-    ) -> np.ndarray:
-        if self.dense_view_dtype.fields is None:
-            values = np.asarray(deserialize_proto_Value(contents["values"]))
-            return values.astype(self.dense_view_dtype, copy=False).reshape(
-                self.dense_view_shape
-            )
-
-        out = np.empty(self.dense_view_shape, dtype=self.dense_view_dtype)
-        for storage_key, field_name in self._storage_field_map.items():
-            field_dtype = self.dense_view_dtype.fields[field_name][0]
-            values = np.asarray(deserialize_proto_Value(contents[storage_key]))
-            out[field_name] = values.astype(field_dtype, copy=False).reshape(
-                self.dense_view_shape
-            )
-        return out
-
-    def to_proto_payload(self) -> hist_pb2.ChunkedHistPayload:
-        payload = hist_pb2.ChunkedHistPayload(hist_json=self.metadata_json())
-        for key, dense_view in self.items():
-            payload.chunks.append(
-                hist_pb2.ChunkPayload(
-                    chunk_key={
-                        axis_name: serialize_proto_Value(value)
-                        for axis_name, value in zip(
-                            self.chunk_axis_names, key, strict=True
-                        )
-                    },
-                    dense_storage=self.serialize_dense_view(dense_view),
-                )
-            )
-        return payload
-
-    @classmethod
-    def from_proto_payload(
-        cls,
-        payload: hist_pb2.ChunkedHistPayload,
-        *,
-        codec: numcodecs.abc.Codec | None = None,
-    ) -> ChunkedHist:
-        chunked = cls.from_metadata_json(payload.hist_json, codec=codec)
-        for chunk in payload.chunks:
-            chunk_key_kwargs = {
-                key: deserialize_proto_Value(value)
-                for key, value in chunk.chunk_key.items()
-            }
-            chunk_key, _ = chunked.split_fill_kwargs(chunk_key_kwargs)
-            chunked.add_dense_view(
-                chunk_key,
-                chunked.deserialize_dense_view(chunk.dense_storage),
-            )
-        return chunked
 
     def __getitem__(
         self,
@@ -669,13 +529,11 @@ class ChunkedHist:
         for result_spec in result.chunk_axes:
             result_spec.known_keys = keys_by_axis[result_spec.name]
         for key in matching_keys:
-            chunk_view = self._load_chunk_view(key)
-            assert chunk_view is not None
-            result._save_chunk_view_unchecked(key, chunk_view)
+            result._save_chunk_view(key, self._chunks[key].copy(order="C"))
         return result
 
     def histogram_bytes(self) -> int:
-        return sum(len(tp.cast(bytes, chunk)) for chunk in self._chunks.values())
+        return sum(chunk.nbytes for chunk in self._chunks.values())
 
     def keys(self) -> Iterable[ChunkKey]:
         return self._chunks.keys()
@@ -723,7 +581,7 @@ class ChunkedHist:
             >>> left += right
         """
         if isinstance(other, hist.Hist):
-            other = ChunkedHist.from_hist(other, codec=self.codec)
+            other = ChunkedHist.from_hist(other)
         if not isinstance(other, ChunkedHist):
             return NotImplemented
         if (
@@ -733,7 +591,7 @@ class ChunkedHist:
             or self.label != other.label
         ):
             raise ValueError("cannot add incompatible histograms")
-        for key, dense_view in other.items():
+        for key, dense_view in other._chunks.items():
             self.add_dense_view(key, dense_view)
         return self
 

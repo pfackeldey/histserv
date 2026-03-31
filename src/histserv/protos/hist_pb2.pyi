@@ -2,6 +2,7 @@ import datetime
 
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from collections.abc import Iterable as _Iterable, Mapping as _Mapping
@@ -9,52 +10,49 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class CompressionCodec(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    COMPRESSION_CODEC_NONE: _ClassVar[CompressionCodec]
+    COMPRESSION_CODEC_ZSTD: _ClassVar[CompressionCodec]
+
+COMPRESSION_CODEC_NONE: CompressionCodec
+COMPRESSION_CODEC_ZSTD: CompressionCodec
+
+class ChunkScalar(_message.Message):
+    __slots__ = ("string_value", "int_value")
+    STRING_VALUE_FIELD_NUMBER: _ClassVar[int]
+    INT_VALUE_FIELD_NUMBER: _ClassVar[int]
+    string_value: str
+    int_value: int
+    def __init__(
+        self, string_value: _Optional[str] = ..., int_value: _Optional[int] = ...
+    ) -> None: ...
+
 class ChunkPayload(_message.Message):
-    __slots__ = ("chunk_key", "dense_storage")
-    class ChunkKeyEntry(_message.Message):
-        __slots__ = ("key", "value")
-        KEY_FIELD_NUMBER: _ClassVar[int]
-        VALUE_FIELD_NUMBER: _ClassVar[int]
-        key: str
-        value: Value
-        def __init__(
-            self,
-            key: _Optional[str] = ...,
-            value: _Optional[_Union[Value, _Mapping]] = ...,
-        ) -> None: ...
-
-    class DenseStorageEntry(_message.Message):
-        __slots__ = ("key", "value")
-        KEY_FIELD_NUMBER: _ClassVar[int]
-        VALUE_FIELD_NUMBER: _ClassVar[int]
-        key: str
-        value: Value
-        def __init__(
-            self,
-            key: _Optional[str] = ...,
-            value: _Optional[_Union[Value, _Mapping]] = ...,
-        ) -> None: ...
-
+    __slots__ = ("chunk_key", "dense_view")
     CHUNK_KEY_FIELD_NUMBER: _ClassVar[int]
-    DENSE_STORAGE_FIELD_NUMBER: _ClassVar[int]
-    chunk_key: _containers.MessageMap[str, Value]
-    dense_storage: _containers.MessageMap[str, Value]
+    DENSE_VIEW_FIELD_NUMBER: _ClassVar[int]
+    chunk_key: _containers.RepeatedCompositeFieldContainer[ChunkScalar]
+    dense_view: bytes
     def __init__(
         self,
-        chunk_key: _Optional[_Mapping[str, Value]] = ...,
-        dense_storage: _Optional[_Mapping[str, Value]] = ...,
+        chunk_key: _Optional[_Iterable[_Union[ChunkScalar, _Mapping]]] = ...,
+        dense_view: _Optional[bytes] = ...,
     ) -> None: ...
 
 class ChunkedHistPayload(_message.Message):
-    __slots__ = ("hist_json", "chunks")
+    __slots__ = ("hist_json", "chunks", "dense_view_codec")
     HIST_JSON_FIELD_NUMBER: _ClassVar[int]
     CHUNKS_FIELD_NUMBER: _ClassVar[int]
+    DENSE_VIEW_CODEC_FIELD_NUMBER: _ClassVar[int]
     hist_json: str
     chunks: _containers.RepeatedCompositeFieldContainer[ChunkPayload]
+    dense_view_codec: CompressionCodec
     def __init__(
         self,
         hist_json: _Optional[str] = ...,
         chunks: _Optional[_Iterable[_Union[ChunkPayload, _Mapping]]] = ...,
+        dense_view_codec: _Optional[_Union[CompressionCodec, str]] = ...,
     ) -> None: ...
 
 class InitRequest(_message.Message):
@@ -96,45 +94,24 @@ class ExistsResponse(_message.Message):
     def __init__(self, exists: bool = ...) -> None: ...
 
 class FillRequest(_message.Message):
-    __slots__ = ("hist_id", "unique_id", "chunk_key", "dense_storage")
-    class ChunkKeyEntry(_message.Message):
-        __slots__ = ("key", "value")
-        KEY_FIELD_NUMBER: _ClassVar[int]
-        VALUE_FIELD_NUMBER: _ClassVar[int]
-        key: str
-        value: Value
-        def __init__(
-            self,
-            key: _Optional[str] = ...,
-            value: _Optional[_Union[Value, _Mapping]] = ...,
-        ) -> None: ...
-
-    class DenseStorageEntry(_message.Message):
-        __slots__ = ("key", "value")
-        KEY_FIELD_NUMBER: _ClassVar[int]
-        VALUE_FIELD_NUMBER: _ClassVar[int]
-        key: str
-        value: Value
-        def __init__(
-            self,
-            key: _Optional[str] = ...,
-            value: _Optional[_Union[Value, _Mapping]] = ...,
-        ) -> None: ...
-
+    __slots__ = ("hist_id", "unique_id", "chunk_key", "dense_view", "dense_view_codec")
     HIST_ID_FIELD_NUMBER: _ClassVar[int]
     UNIQUE_ID_FIELD_NUMBER: _ClassVar[int]
     CHUNK_KEY_FIELD_NUMBER: _ClassVar[int]
-    DENSE_STORAGE_FIELD_NUMBER: _ClassVar[int]
+    DENSE_VIEW_FIELD_NUMBER: _ClassVar[int]
+    DENSE_VIEW_CODEC_FIELD_NUMBER: _ClassVar[int]
     hist_id: str
     unique_id: bytes
-    chunk_key: _containers.MessageMap[str, Value]
-    dense_storage: _containers.MessageMap[str, Value]
+    chunk_key: _containers.RepeatedCompositeFieldContainer[ChunkScalar]
+    dense_view: bytes
+    dense_view_codec: CompressionCodec
     def __init__(
         self,
         hist_id: _Optional[str] = ...,
         unique_id: _Optional[bytes] = ...,
-        chunk_key: _Optional[_Mapping[str, Value]] = ...,
-        dense_storage: _Optional[_Mapping[str, Value]] = ...,
+        chunk_key: _Optional[_Iterable[_Union[ChunkScalar, _Mapping]]] = ...,
+        dense_view: _Optional[bytes] = ...,
+        dense_view_codec: _Optional[_Union[CompressionCodec, str]] = ...,
     ) -> None: ...
 
 class FillResponse(_message.Message):
@@ -142,18 +119,21 @@ class FillResponse(_message.Message):
     def __init__(self) -> None: ...
 
 class FillManyRequest(_message.Message):
-    __slots__ = ("hist_id", "unique_id", "payload")
+    __slots__ = ("hist_id", "unique_id", "chunks", "dense_view_codec")
     HIST_ID_FIELD_NUMBER: _ClassVar[int]
     UNIQUE_ID_FIELD_NUMBER: _ClassVar[int]
-    PAYLOAD_FIELD_NUMBER: _ClassVar[int]
+    CHUNKS_FIELD_NUMBER: _ClassVar[int]
+    DENSE_VIEW_CODEC_FIELD_NUMBER: _ClassVar[int]
     hist_id: str
     unique_id: bytes
-    payload: ChunkedHistPayload
+    chunks: _containers.RepeatedCompositeFieldContainer[ChunkPayload]
+    dense_view_codec: CompressionCodec
     def __init__(
         self,
         hist_id: _Optional[str] = ...,
         unique_id: _Optional[bytes] = ...,
-        payload: _Optional[_Union[ChunkedHistPayload, _Mapping]] = ...,
+        chunks: _Optional[_Iterable[_Union[ChunkPayload, _Mapping]]] = ...,
+        dense_view_codec: _Optional[_Union[CompressionCodec, str]] = ...,
     ) -> None: ...
 
 class ChunkSelector(_message.Message):
@@ -161,11 +141,11 @@ class ChunkSelector(_message.Message):
     AXIS_FIELD_NUMBER: _ClassVar[int]
     VALUES_FIELD_NUMBER: _ClassVar[int]
     axis: str
-    values: _containers.RepeatedCompositeFieldContainer[Value]
+    values: _containers.RepeatedCompositeFieldContainer[ChunkScalar]
     def __init__(
         self,
         axis: _Optional[str] = ...,
-        values: _Optional[_Iterable[_Union[Value, _Mapping]]] = ...,
+        values: _Optional[_Iterable[_Union[ChunkScalar, _Mapping]]] = ...,
     ) -> None: ...
 
 class SnapshotRequest(_message.Message):
@@ -311,37 +291,4 @@ class TokenScopedStats(_message.Message):
         histogram_count: _Optional[int] = ...,
         histogram_bytes: _Optional[int] = ...,
         rpc_calls_total: _Optional[_Mapping[str, int]] = ...,
-    ) -> None: ...
-
-class Ndarray(_message.Message):
-    __slots__ = ("shape", "dtype", "data")
-    SHAPE_FIELD_NUMBER: _ClassVar[int]
-    DTYPE_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    shape: _containers.RepeatedScalarFieldContainer[int]
-    dtype: str
-    data: bytes
-    def __init__(
-        self,
-        shape: _Optional[_Iterable[int]] = ...,
-        dtype: _Optional[str] = ...,
-        data: _Optional[bytes] = ...,
-    ) -> None: ...
-
-class Value(_message.Message):
-    __slots__ = ("array_value", "string_value", "int_value", "bool_value")
-    ARRAY_VALUE_FIELD_NUMBER: _ClassVar[int]
-    STRING_VALUE_FIELD_NUMBER: _ClassVar[int]
-    INT_VALUE_FIELD_NUMBER: _ClassVar[int]
-    BOOL_VALUE_FIELD_NUMBER: _ClassVar[int]
-    array_value: Ndarray
-    string_value: str
-    int_value: int
-    bool_value: bool
-    def __init__(
-        self,
-        array_value: _Optional[_Union[Ndarray, _Mapping]] = ...,
-        string_value: _Optional[str] = ...,
-        int_value: _Optional[int] = ...,
-        bool_value: bool = ...,
     ) -> None: ...

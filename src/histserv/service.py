@@ -5,7 +5,6 @@ import time
 import typing as tp
 import uuid
 from collections import Counter
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import partial
@@ -21,7 +20,14 @@ from histserv.logging import (
     get_logger,
 )
 from histserv.protos import hist_pb2, hist_pb2_grpc
-from histserv.serialize import deserialize_proto_Value
+from histserv.serialize import (
+    deserialize_chunk_key,
+    deserialize_chunk_scalar,
+    deserialize_chunked_hist_payload,
+    deserialize_dense_view_bytes,
+    merge_chunk_payloads,
+    serialize_chunked_hist_payload,
+)
 from histserv.util import bytes_repr, duration_repr
 
 logger = get_logger("histserv")
@@ -310,7 +316,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
             )
 
             try:
-                hist_obj = ChunkedHist.from_proto_payload(request.payload)
+                hist_obj = deserialize_chunked_hist_payload(request.payload)
             except (TypeError, ValueError) as exc:
                 logger.error(fmt_rpc_msg(msg=f"invalid init payload: {exc!r}"))
                 await self._abort(
@@ -396,15 +402,18 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
             )
 
             try:
-                chunk_key_kwargs = {
-                    key: deserialize_proto_Value(value)
-                    for key, value in request.chunk_key.items()
-                }
-                chunk_key, _ = entry.hist.split_fill_kwargs(chunk_key_kwargs)
-                entry.hist.add_dense_view(
-                    chunk_key,
-                    entry.hist.deserialize_dense_view(request.dense_storage),
+                chunk_key = deserialize_chunk_key(
+                    request.chunk_key,
+                    axis_count=len(entry.hist.chunk_axis_names),
                 )
+                dense_view = deserialize_dense_view_bytes(
+                    request.dense_view,
+                    shape=entry.hist.dense_view_shape,
+                    dtype=entry.hist.dense_view_dtype,
+                    expected_nbytes=entry.hist._dense_view_nbytes,
+                    codec=request.dense_view_codec,
+                )
+                entry.hist.add_dense_view(chunk_key, dense_view)
                 self._remember_unique_id(entry, unique_id)
                 logger.debug(fmt_rpc_msg(msg="merged one dense fill payload"))
             except (TypeError, ValueError) as exc:
@@ -454,12 +463,15 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
             )
 
             try:
-                incoming = ChunkedHist.from_proto_payload(request.payload)
-                entry.hist += incoming
+                merged_bytes = merge_chunk_payloads(
+                    entry.hist,
+                    request.chunks,
+                    codec=request.dense_view_codec,
+                )
                 self._remember_unique_id(entry, unique_id)
                 logger.debug(
                     fmt_rpc_msg(
-                        msg=f"merged {bytes_repr(incoming.histogram_bytes())} of chunked storage"
+                        msg=f"merged {bytes_repr(merged_bytes)} of decoded dense payload"
                     )
                 )
             except (TypeError, ValueError) as exc:
@@ -512,12 +524,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                             raise ValueError("chunk selector axis must be non-empty")
                         values: list[str | int] = []
                         for value in selector.values:
-                            decoded = deserialize_proto_Value(value)
-                            if not isinstance(decoded, str | int):
-                                raise ValueError(
-                                    "chunk selector values must be scalar str/int"
-                                )
-                            values.append(decoded)
+                            values.append(deserialize_chunk_scalar(value))
                         if not values:
                             raise ValueError(
                                 f"chunk selector for axis {selector.axis!r} must be non-empty"
@@ -534,7 +541,9 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                         msg="created snapshot",
                     )
                 )
-                return hist_pb2.SnapshotResponse(payload=snapshot.to_proto_payload())
+                return hist_pb2.SnapshotResponse(
+                    payload=serialize_chunked_hist_payload(snapshot)
+                )
             except (TypeError, ValueError) as exc:
                 logger.error(
                     fmt_rpc_logger_msg(

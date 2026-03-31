@@ -15,14 +15,27 @@ service HistogrammerService {
   rpc Stats(StatsRequest) returns (StatsResponse) {}
 }
 
+enum CompressionCodec {
+  COMPRESSION_CODEC_NONE = 0;
+  COMPRESSION_CODEC_ZSTD = 1;
+}
+
+message ChunkScalar {
+  oneof value {
+    string string_value = 1;
+    int64 int_value = 2;
+  }
+}
+
 message ChunkPayload {
-  map<string, Value> chunk_key = 1;
-  map<string, Value> dense_storage = 2;
+  repeated ChunkScalar chunk_key = 1;
+  bytes dense_view = 2;
 }
 
 message ChunkedHistPayload {
   string hist_json = 1;
   repeated ChunkPayload chunks = 2;
+  CompressionCodec dense_view_codec = 3;
 }
 
 message InitRequest {
@@ -52,8 +65,9 @@ message ExistsResponse {
 message FillRequest {
   string hist_id = 1;
   optional bytes unique_id = 2;
-  map<string, Value> chunk_key = 3;
-  map<string, Value> dense_storage = 4;
+  repeated ChunkScalar chunk_key = 3;
+  bytes dense_view = 4;
+  CompressionCodec dense_view_codec = 5;
 }
 
 message FillResponse {}
@@ -61,12 +75,13 @@ message FillResponse {}
 message FillManyRequest {
   string hist_id = 1;
   optional bytes unique_id = 2;
-  ChunkedHistPayload payload = 3;
+  repeated ChunkPayload chunks = 3;
+  CompressionCodec dense_view_codec = 4;
 }
 
 message ChunkSelector {
   string axis = 1;
-  repeated Value values = 2;
+  repeated ChunkScalar values = 2;
 }
 
 message SnapshotRequest {
@@ -117,19 +132,4 @@ message TokenScopedStats {
   uint64 histogram_count = 1;
   uint64 histogram_bytes = 2;
   map<string, uint64> rpc_calls_total = 3;
-}
-
-message Ndarray {
-  repeated int64 shape = 1;
-  string dtype = 2;
-  bytes data = 3;
-}
-
-message Value {
-  oneof value {
-    Ndarray array_value = 1;
-    string string_value = 2;
-    int64 int_value = 3;
-    bool bool_value = 4;
-  }
 }

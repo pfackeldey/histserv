@@ -134,8 +134,12 @@ Unsupported today:
 - `boost_histogram.storage.WeightedMean`
 
 Notes:
-- Categorical axes (`IntCategory`, `StrCategory`) are treated as chunk keys and
-  must be filled with scalar values.
+- Growable categorical axes (`IntCategory`, `StrCategory`) are treated as
+  chunk keys rather than dense axes.
+- Histograms with one or more growable categorical axes are supported; the
+  categorical values must be provided as scalars when filling.
+- On the wire, fills are sent as dense per-chunk payloads rather than as
+  generic Python objects.
 - `RemoteHist.snapshot()` returns a `ChunkedHist`; call `.to_hist()` to
   materialize a local `hist.Hist`.
 - `fill_many(...)` is useful for bundling several fills into one gRPC request.
@@ -147,6 +151,12 @@ Notes:
 ### Install
 ```shell
 uv sync --dev
+```
+
+### Test
+```shell
+python -m pytest -q
+uvx ty check src
 ```
 
 ### Protobuf Codegen
