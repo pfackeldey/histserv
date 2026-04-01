@@ -14,22 +14,33 @@ if tp.TYPE_CHECKING:
 
 
 _ZSTD = numcodecs.Zstd(level=1)
+_LZ4 = numcodecs.LZ4(acceleration=1)
+_CODECS = {
+    "zstd": _ZSTD,
+    "lz4": _LZ4,
+}
 
 
-def _encode_bytes(contents: bytes, codec: hist_pb2.CompressionCodec.ValueType) -> bytes:
-    if codec == hist_pb2.COMPRESSION_CODEC_NONE:
+def _normalize_codec(codec: str | None) -> str | None:
+    if codec is None:
+        return None
+    if codec in _CODECS:
+        return codec
+    raise ValueError(f"unsupported compression codec: {codec!r}")
+
+
+def _encode_bytes(contents: bytes, codec: str | None) -> bytes:
+    codec = _normalize_codec(codec)
+    if codec is None:
         return contents
-    if codec == hist_pb2.COMPRESSION_CODEC_ZSTD:
-        return tp.cast(bytes, _ZSTD.encode(contents))
-    raise ValueError(f"unsupported compression codec: {codec}")
+    return tp.cast(bytes, _CODECS[codec].encode(contents))
 
 
-def _decode_bytes(contents: bytes, codec: hist_pb2.CompressionCodec.ValueType) -> bytes:
-    if codec == hist_pb2.COMPRESSION_CODEC_NONE:
+def _decode_bytes(contents: bytes, codec: str | None) -> bytes:
+    codec = _normalize_codec(codec)
+    if codec is None:
         return contents
-    if codec == hist_pb2.COMPRESSION_CODEC_ZSTD:
-        return tp.cast(bytes, _ZSTD.decode(contents))
-    raise ValueError(f"unsupported compression codec: {codec}")
+    return tp.cast(bytes, _CODECS[codec].decode(contents))
 
 
 def serialize_chunk_scalar(value: ChunkScalar) -> hist_pb2.ChunkScalar:
@@ -52,7 +63,7 @@ def serialize_dense_view_bytes(
     *,
     shape: tuple[int, ...],
     dtype: np.dtype[tp.Any],
-    codec: hist_pb2.CompressionCodec.ValueType = hist_pb2.COMPRESSION_CODEC_NONE,
+    codec: str | None = None,
 ) -> bytes:
     array = np.asarray(dense_view, order="C")
     if array.shape != shape:
@@ -72,7 +83,7 @@ def deserialize_dense_view_bytes(
     shape: tuple[int, ...],
     dtype: np.dtype[tp.Any],
     expected_nbytes: int,
-    codec: hist_pb2.CompressionCodec.ValueType = hist_pb2.COMPRESSION_CODEC_NONE,
+    codec: str | None = None,
 ) -> np.ndarray:
     decoded = _decode_bytes(contents, codec)
     if len(decoded) != expected_nbytes:
@@ -88,7 +99,7 @@ def serialize_chunk_payload(
     *,
     shape: tuple[int, ...],
     dtype: np.dtype[tp.Any],
-    codec: hist_pb2.CompressionCodec.ValueType = hist_pb2.COMPRESSION_CODEC_NONE,
+    codec: str | None = None,
 ) -> hist_pb2.ChunkPayload:
     return hist_pb2.ChunkPayload(
         chunk_key=[serialize_chunk_scalar(value) for value in key],
@@ -115,12 +126,12 @@ def deserialize_chunk_key(
 def serialize_chunked_hist_payload(
     chunked: ChunkedHist,
     *,
-    codec: hist_pb2.CompressionCodec.ValueType = hist_pb2.COMPRESSION_CODEC_NONE,
+    codec: str | None = None,
 ) -> hist_pb2.ChunkedHistPayload:
-    payload = hist_pb2.ChunkedHistPayload(
-        hist_json=chunked.metadata_json(),
-        dense_view_codec=codec,
-    )
+    payload = hist_pb2.ChunkedHistPayload(hist_json=chunked.metadata_json())
+    normalized_codec = _normalize_codec(codec)
+    if normalized_codec is not None:
+        payload.dense_view_codec = normalized_codec
     for key, dense_view in chunked._chunks.items():
         payload.chunks.append(
             serialize_chunk_payload(
@@ -128,7 +139,7 @@ def serialize_chunked_hist_payload(
                 dense_view,
                 shape=chunked.dense_view_shape,
                 dtype=chunked.dense_view_dtype,
-                codec=codec,
+                codec=normalized_codec,
             )
         )
     return payload
@@ -138,7 +149,7 @@ def merge_chunk_payloads(
     chunked: ChunkedHist,
     chunks: tp.Iterable[hist_pb2.ChunkPayload],
     *,
-    codec: hist_pb2.CompressionCodec.ValueType = hist_pb2.COMPRESSION_CODEC_NONE,
+    codec: str | None = None,
 ) -> int:
     merged_bytes = 0
     for chunk in chunks:
@@ -167,7 +178,9 @@ def deserialize_chunked_hist_payload(
     merge_chunk_payloads(
         chunked,
         payload.chunks,
-        codec=payload.dense_view_codec,
+        codec=payload.dense_view_codec
+        if payload.HasField("dense_view_codec")
+        else None,
     )
     return chunked
 

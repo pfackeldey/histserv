@@ -546,10 +546,8 @@ class ChunkedHist:
 
     def __repr__(self) -> str:
         axes_repr = ",\n  ".join(
-            (
-                f"{type(axis).__name__}(..., growth={axis.traits.growth}, "
-                f"name={axis.name!r}, label={axis.label!r})"
-            )
+            # chunked hist categorical axes are always growable
+            f"{type(axis).__name__}(..., growth=True, name={axis.name!r})"
             if isinstance(axis, bh.axis.IntCategory | bh.axis.StrCategory)
             else repr(axis)
             for axis in self.axes

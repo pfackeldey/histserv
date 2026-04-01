@@ -263,6 +263,12 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
     def _request_unique_id(request: tp.Any) -> bytes | None:
         return request.unique_id if request.HasField("unique_id") else None
 
+    @staticmethod
+    def _request_dense_view_codec(request: tp.Any) -> str | None:
+        return (
+            request.dense_view_codec if request.HasField("dense_view_codec") else None
+        )
+
     def _compute_stats(self, *, token: str | None) -> StatsSnapshot:
         entries = list(self._entries.values())
         token_scoped = None
@@ -411,7 +417,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                     shape=entry.hist.dense_view_shape,
                     dtype=entry.hist.dense_view_dtype,
                     expected_nbytes=entry.hist._dense_view_nbytes,
-                    codec=request.dense_view_codec,
+                    codec=self._request_dense_view_codec(request),
                 )
                 entry.hist.add_dense_view(chunk_key, dense_view)
                 self._remember_unique_id(entry, unique_id)
@@ -466,7 +472,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 merged_bytes = merge_chunk_payloads(
                     entry.hist,
                     request.chunks,
-                    codec=request.dense_view_codec,
+                    codec=self._request_dense_view_codec(request),
                 )
                 self._remember_unique_id(entry, unique_id)
                 logger.debug(
@@ -542,7 +548,10 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                     )
                 )
                 return hist_pb2.SnapshotResponse(
-                    payload=serialize_chunked_hist_payload(snapshot)
+                    payload=serialize_chunked_hist_payload(
+                        snapshot,
+                        codec=self._request_dense_view_codec(request),
+                    )
                 )
             except (TypeError, ValueError) as exc:
                 logger.error(

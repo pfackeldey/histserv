@@ -8,7 +8,9 @@ import pytest
 from histserv.chunked_hist import ChunkedHist
 from histserv.serialize import (
     deserialize_chunked_hist_payload,
+    deserialize_dense_view_bytes,
     serialize_chunked_hist_payload,
+    serialize_dense_view_bytes,
 )
 from tests.histogram_fixtures import CategoricalHistCase, categorical_hist_cases
 
@@ -115,6 +117,47 @@ def test_chunked_hist_proto_payload_round_trips_existing_yields() -> None:
         restored.to_hist().view(flow=True),
         source.to_hist().view(flow=True),
     )
+
+
+def test_chunked_hist_proto_payload_omits_codec_when_uncompressed() -> None:
+    source = ChunkedHist(
+        hist.axis.Regular(4, 0, 4, name="x"),
+        hist.axis.StrCategory([], growth=True, name="cat"),
+        storage=bh.storage.Weight(),
+    )
+    source.fill(
+        x=np.array([0.5, 1.5], dtype=np.float64),
+        cat="a",
+        weight=np.array([1.0, 2.0], dtype=np.float64),
+    )
+
+    payload = serialize_chunked_hist_payload(source)
+    assert not payload.HasField("dense_view_codec")
+
+    zstd_payload = serialize_chunked_hist_payload(source, codec="zstd")
+    assert zstd_payload.HasField("dense_view_codec")
+    assert zstd_payload.dense_view_codec == "zstd"
+
+
+def test_dense_view_codec_rejects_literal_none_string() -> None:
+    dense_view = np.zeros((6,), dtype=np.float64)
+
+    with pytest.raises(ValueError, match="unsupported compression codec"):
+        serialize_dense_view_bytes(
+            dense_view,
+            shape=dense_view.shape,
+            dtype=dense_view.dtype,
+            codec="none",
+        )
+
+    with pytest.raises(ValueError, match="unsupported compression codec"):
+        deserialize_dense_view_bytes(
+            dense_view.tobytes(),
+            shape=dense_view.shape,
+            dtype=dense_view.dtype,
+            expected_nbytes=dense_view.nbytes,
+            codec="none",
+        )
 
 
 def test_chunked_hist_rejects_mean_storage() -> None:

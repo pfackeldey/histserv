@@ -48,17 +48,20 @@ class StatsDict(_StatsBaseDict, total=False):
     token_scoped: TokenScopedStatsDict
 
 
-FillCompression = Literal["zstd"]
+FillCompression = Literal["zstd", "lz4"]
 
 
-def _resolve_fill_compression(
+def _validate_fill_compression(
     compression: FillCompression | None,
-) -> hist_pb2.CompressionCodec.ValueType:
-    if compression is None:
-        return hist_pb2.COMPRESSION_CODEC_NONE
-    if compression == "zstd":
-        return hist_pb2.COMPRESSION_CODEC_ZSTD
+) -> FillCompression | None:
+    if compression is None or compression in {"zstd", "lz4"}:
+        return compression
     raise ValueError(f"unsupported fill compression: {compression!r}")
+
+
+def _set_dense_view_codec(message: tp.Any, codec: FillCompression | None) -> None:
+    if codec is not None:
+        message.dense_view_codec = codec
 
 
 class Client:
@@ -111,6 +114,7 @@ class Client:
         *,
         token: str | None = None,
         timeout: int = 10,
+        compression: FillCompression | None = None,
     ) -> RemoteHist:
         """Initialize a histogram on the server.
 
@@ -118,6 +122,9 @@ class Client:
             hist: Local `hist.Hist` or `ChunkedHist` to upload.
             token: Optional access token associated with the histogram.
             timeout: RPC timeout in seconds.
+            compression: Optional dense payload compression for this RPC.
+                Use `None` (default) for no compression. Supported codecs are
+                `"zstd"` and `"lz4"`.
 
         Returns:
             A `RemoteHist` handle for the created server-side histogram.
@@ -136,13 +143,13 @@ class Client:
             )
         if not all(axis.name for axis in chunked.axes):
             raise ValueError("all axes must be named")
-
+        compression = _validate_fill_compression(compression)
+        payload = serialize_chunked_hist_payload(
+            chunked,
+            codec=compression,
+        )
         response = self.stub.Init(
-            hist_pb2.InitRequest(
-                payload=serialize_chunked_hist_payload(
-                    chunked,
-                )
-            ),
+            hist_pb2.InitRequest(payload=payload),
             timeout=timeout,
             metadata=self._metadata(token),
         )
@@ -323,9 +330,8 @@ class RemoteHist:
             timeout: RPC timeout in seconds.
             unique_id: Optional idempotency key for the fill request.
             compression: Optional dense payload compression for this RPC.
-                Use `None` (default) for no compression. Use `"zstd"` to
-                reduce bandwidth at the cost of lower throughput and higher
-                latency.
+                Use `None` (default) for no compression. Supported codecs are
+                `"zstd"` and `"lz4"`.
             **kwargs: Named axis values and optional storage arguments such as
                 `weight` or `sample`.
 
@@ -335,7 +341,7 @@ class RemoteHist:
         Example:
             >>> remote_hist.fill(x=[0.2, 0.4], cat="a")
         """
-        dense_view_codec = _resolve_fill_compression(compression)
+        compression = _validate_fill_compression(compression)
         chunk_key, dense_kwargs = self._template.split_fill_kwargs(kwargs)
         dense_hist = self._make_dense_hist()
         dense_hist.fill(**dense_kwargs)
@@ -344,14 +350,14 @@ class RemoteHist:
             dense_hist.view(flow=True),
             shape=self._template.dense_view_shape,
             dtype=self._template.dense_view_dtype,
-            codec=dense_view_codec,
+            codec=compression,
         )
         request = hist_pb2.FillRequest(
             hist_id=self.hist_id,
             chunk_key=chunk.chunk_key,
             dense_view=chunk.dense_view,
-            dense_view_codec=dense_view_codec,
         )
+        _set_dense_view_codec(request, compression)
         if unique_id is not None:
             request.unique_id = serialize_unique_id(unique_id)
         return self.client.stub.Fill(
@@ -378,9 +384,8 @@ class RemoteHist:
             timeout: RPC timeout in seconds.
             unique_id: Optional idempotency key for the fill-many request.
             compression: Optional dense payload compression for this RPC.
-                Use `None` (default) for no compression. Use `"zstd"` to
-                reduce bandwidth at the cost of lower throughput and higher
-                latency.
+                Use `None` (default) for no compression. Supported codecs are
+                `"zstd"` and `"lz4"`.
 
         Returns:
             The gRPC fill response.
@@ -393,7 +398,7 @@ class RemoteHist:
             ...     ]
             ... )
         """
-        dense_view_codec = _resolve_fill_compression(compression)
+        compression = _validate_fill_compression(compression)
         fills_list = list(fills)
         split_fills = [
             self._template.split_fill_kwargs(fill_kwargs) for fill_kwargs in fills_list
@@ -417,7 +422,7 @@ class RemoteHist:
                             dense_view,
                             shape=self._template.dense_view_shape,
                             dtype=self._template.dense_view_dtype,
-                            codec=dense_view_codec,
+                            codec=compression,
                         )
                     )
                 finally:
@@ -425,8 +430,8 @@ class RemoteHist:
         request = hist_pb2.FillManyRequest(
             hist_id=self.hist_id,
             chunks=chunks,
-            dense_view_codec=dense_view_codec,
         )
+        _set_dense_view_codec(request, compression)
         if unique_id is not None:
             request.unique_id = serialize_unique_id(unique_id)
         return self.client.stub.FillMany(
@@ -460,12 +465,16 @@ class RemoteHist:
         delete_from_server: bool = False,
         *,
         timeout: int = 10,
+        compression: FillCompression | None = None,
     ) -> ChunkedHist:
         """Fetch the current remote histogram contents.
 
         Args:
             delete_from_server: Whether to remove the histogram after snapshotting.
             timeout: RPC timeout in seconds.
+            compression: Optional dense payload compression for this RPC.
+                Use `None` (default) for no compression. Supported codecs are
+                `"zstd"` and `"lz4"`.
 
         Returns:
             A local `ChunkedHist` snapshot of the server-side histogram.
@@ -474,11 +483,14 @@ class RemoteHist:
             >>> snapshot = remote_hist.snapshot()
             >>> dense = snapshot.to_hist()
         """
+        compression = _validate_fill_compression(compression)
+        request = hist_pb2.SnapshotRequest(
+            hist_id=self.hist_id,
+            delete_from_server=delete_from_server,
+        )
+        _set_dense_view_codec(request, compression)
         response = self.client.stub.Snapshot(
-            hist_pb2.SnapshotRequest(
-                hist_id=self.hist_id,
-                delete_from_server=delete_from_server,
-            ),
+            request,
             timeout=timeout,
             metadata=self._metadata(),
         )
@@ -560,11 +572,19 @@ class RemoteHistSlice:
             ")"
         )
 
-    def snapshot(self, *, timeout: int = 10) -> ChunkedHist:
+    def snapshot(
+        self,
+        *,
+        timeout: int = 10,
+        compression: FillCompression | None = None,
+    ) -> ChunkedHist:
         """Fetch a snapshot of the selected remote chunks.
 
         Args:
             timeout: RPC timeout in seconds.
+            compression: Optional dense payload compression for this RPC.
+                Use `None` (default) for no compression. Supported codecs are
+                `"zstd"` and `"lz4"`.
 
         Returns:
             A local `ChunkedHist` containing only the selected chunks.
@@ -573,18 +593,21 @@ class RemoteHistSlice:
             >>> sliced = remote_hist[{"cat": "a"}]
             >>> snapshot = sliced.snapshot()
         """
+        compression = _validate_fill_compression(compression)
+        request = hist_pb2.SnapshotRequest(
+            hist_id=self.remote.hist_id,
+            delete_from_server=False,
+            chunk_selectors=[
+                hist_pb2.ChunkSelector(
+                    axis=axis_name,
+                    values=[serialize_chunk_scalar(value) for value in values],
+                )
+                for axis_name, values in self.selection.items()
+            ],
+        )
+        _set_dense_view_codec(request, compression)
         response = self.remote.client.stub.Snapshot(
-            hist_pb2.SnapshotRequest(
-                hist_id=self.remote.hist_id,
-                delete_from_server=False,
-                chunk_selectors=[
-                    hist_pb2.ChunkSelector(
-                        axis=axis_name,
-                        values=[serialize_chunk_scalar(value) for value in values],
-                    )
-                    for axis_name, values in self.selection.items()
-                ],
-            ),
+            request,
             timeout=timeout,
             metadata=self.remote._metadata(),
         )

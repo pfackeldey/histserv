@@ -21,6 +21,7 @@ CATEGORICAL_AXIS_NAME_CASES: tuple[tuple[str, ...], ...] = (
     ("cat", "var"),
     ("cat", "var", "region"),
 )
+COMPRESSION_CASES = [None, "zstd", "lz4"]
 
 
 def _weighted_categorical_hist() -> Hist:
@@ -112,7 +113,23 @@ def test_remote_fill_many_matches_local_hist_for_regular_axes(client: Client) ->
     )
 
 
-@pytest.mark.parametrize("compression", [None, "zstd"])
+@pytest.mark.parametrize("compression", COMPRESSION_CASES)
+def test_remote_init_supports_per_rpc_compression(
+    client: Client,
+    compression: str | None,
+) -> None:
+    local_hist = regular_hist()
+    local_hist.fill(x=np.array([0.25, 1.5, 3.75], dtype=np.float32))
+    local_hist.fill(x=np.array([0.5, 1.75], dtype=np.float32))
+
+    remote_hist = client.init(local_hist, token="alice", compression=compression)
+    remote_snapshot = remote_hist.snapshot()
+    np.testing.assert_equal(
+        remote_snapshot.to_hist().view(flow=True), local_hist.view(flow=True)
+    )
+
+
+@pytest.mark.parametrize("compression", COMPRESSION_CASES)
 def test_remote_fill_supports_per_rpc_compression(
     client: Client,
     compression: str | None,
@@ -131,7 +148,7 @@ def test_remote_fill_supports_per_rpc_compression(
     )
 
 
-@pytest.mark.parametrize("compression", [None, "zstd"])
+@pytest.mark.parametrize("compression", COMPRESSION_CASES)
 def test_remote_fill_many_supports_per_rpc_compression(
     client: Client,
     compression: str | None,
@@ -155,12 +172,28 @@ def test_remote_fill_many_supports_per_rpc_compression(
     )
 
 
+@pytest.mark.parametrize("compression", COMPRESSION_CASES)
+def test_remote_snapshot_supports_per_rpc_compression(
+    client: Client,
+    compression: str | None,
+) -> None:
+    local_hist = regular_hist()
+    local_hist.fill(x=np.array([0.25, 1.5, 3.75], dtype=np.float32))
+    local_hist.fill(x=np.array([0.5, 1.75], dtype=np.float32))
+
+    remote_hist = client.init(local_hist, token="alice")
+    remote_snapshot = remote_hist.snapshot(compression=compression)
+    np.testing.assert_equal(
+        remote_snapshot.to_hist().view(flow=True), local_hist.view(flow=True)
+    )
+
+
 @pytest.mark.parametrize(
     "axis_names",
     CATEGORICAL_AXIS_NAME_CASES,
     ids=lambda names: f"{len(names)}d_categorical",
 )
-@pytest.mark.parametrize("compression", [None, "zstd"])
+@pytest.mark.parametrize("compression", COMPRESSION_CASES)
 def test_remote_fill_many_matches_local_hist_for_randomized_categorical_payloads(
     client: Client,
     axis_names: tuple[str, ...],
@@ -200,7 +233,7 @@ def test_remote_fill_many_matches_local_hist_for_randomized_categorical_payloads
     CATEGORICAL_AXIS_NAME_CASES,
     ids=lambda names: f"{len(names)}d_categorical",
 )
-@pytest.mark.parametrize("compression", [None, "zstd"])
+@pytest.mark.parametrize("compression", COMPRESSION_CASES)
 def test_snapshot_matches_local_hist_after_mixed_fill_and_fill_many_for_categorical_axes(
     client: Client,
     axis_names: tuple[str, ...],

@@ -15,11 +15,6 @@ service HistogrammerService {
   rpc Stats(StatsRequest) returns (StatsResponse) {}
 }
 
-enum CompressionCodec {
-  COMPRESSION_CODEC_NONE = 0;
-  COMPRESSION_CODEC_ZSTD = 1;
-}
-
 message ChunkScalar {
   oneof value {
     string string_value = 1;
@@ -35,7 +30,7 @@ message ChunkPayload {
 message ChunkedHistPayload {
   string hist_json = 1;
   repeated ChunkPayload chunks = 2;
-  CompressionCodec dense_view_codec = 3;
+  optional string dense_view_codec = 3;
 }
 
 message InitRequest {
@@ -67,7 +62,7 @@ message FillRequest {
   optional bytes unique_id = 2;
   repeated ChunkScalar chunk_key = 3;
   bytes dense_view = 4;
-  CompressionCodec dense_view_codec = 5;
+  optional string dense_view_codec = 5;
 }
 
 message FillResponse {}
@@ -76,7 +71,7 @@ message FillManyRequest {
   string hist_id = 1;
   optional bytes unique_id = 2;
   repeated ChunkPayload chunks = 3;
-  CompressionCodec dense_view_codec = 4;
+  optional string dense_view_codec = 4;
 }
 
 message ChunkSelector {
@@ -88,6 +83,7 @@ message SnapshotRequest {
   string hist_id = 1;
   bool delete_from_server = 2;
   repeated ChunkSelector chunk_selectors = 3;
+  optional string dense_view_codec = 4;
 }
 
 message SnapshotResponse {

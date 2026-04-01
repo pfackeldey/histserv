@@ -2,21 +2,12 @@ import datetime
 
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.protobuf.internal import containers as _containers
-from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
-
-class CompressionCodec(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    COMPRESSION_CODEC_NONE: _ClassVar[CompressionCodec]
-    COMPRESSION_CODEC_ZSTD: _ClassVar[CompressionCodec]
-
-COMPRESSION_CODEC_NONE: CompressionCodec
-COMPRESSION_CODEC_ZSTD: CompressionCodec
 
 class ChunkScalar(_message.Message):
     __slots__ = ("string_value", "int_value")
@@ -47,12 +38,12 @@ class ChunkedHistPayload(_message.Message):
     DENSE_VIEW_CODEC_FIELD_NUMBER: _ClassVar[int]
     hist_json: str
     chunks: _containers.RepeatedCompositeFieldContainer[ChunkPayload]
-    dense_view_codec: CompressionCodec
+    dense_view_codec: str
     def __init__(
         self,
         hist_json: _Optional[str] = ...,
         chunks: _Optional[_Iterable[_Union[ChunkPayload, _Mapping]]] = ...,
-        dense_view_codec: _Optional[_Union[CompressionCodec, str]] = ...,
+        dense_view_codec: _Optional[str] = ...,
     ) -> None: ...
 
 class InitRequest(_message.Message):
@@ -104,14 +95,14 @@ class FillRequest(_message.Message):
     unique_id: bytes
     chunk_key: _containers.RepeatedCompositeFieldContainer[ChunkScalar]
     dense_view: bytes
-    dense_view_codec: CompressionCodec
+    dense_view_codec: str
     def __init__(
         self,
         hist_id: _Optional[str] = ...,
         unique_id: _Optional[bytes] = ...,
         chunk_key: _Optional[_Iterable[_Union[ChunkScalar, _Mapping]]] = ...,
         dense_view: _Optional[bytes] = ...,
-        dense_view_codec: _Optional[_Union[CompressionCodec, str]] = ...,
+        dense_view_codec: _Optional[str] = ...,
     ) -> None: ...
 
 class FillResponse(_message.Message):
@@ -127,13 +118,13 @@ class FillManyRequest(_message.Message):
     hist_id: str
     unique_id: bytes
     chunks: _containers.RepeatedCompositeFieldContainer[ChunkPayload]
-    dense_view_codec: CompressionCodec
+    dense_view_codec: str
     def __init__(
         self,
         hist_id: _Optional[str] = ...,
         unique_id: _Optional[bytes] = ...,
         chunks: _Optional[_Iterable[_Union[ChunkPayload, _Mapping]]] = ...,
-        dense_view_codec: _Optional[_Union[CompressionCodec, str]] = ...,
+        dense_view_codec: _Optional[str] = ...,
     ) -> None: ...
 
 class ChunkSelector(_message.Message):
@@ -149,18 +140,21 @@ class ChunkSelector(_message.Message):
     ) -> None: ...
 
 class SnapshotRequest(_message.Message):
-    __slots__ = ("hist_id", "delete_from_server", "chunk_selectors")
+    __slots__ = ("hist_id", "delete_from_server", "chunk_selectors", "dense_view_codec")
     HIST_ID_FIELD_NUMBER: _ClassVar[int]
     DELETE_FROM_SERVER_FIELD_NUMBER: _ClassVar[int]
     CHUNK_SELECTORS_FIELD_NUMBER: _ClassVar[int]
+    DENSE_VIEW_CODEC_FIELD_NUMBER: _ClassVar[int]
     hist_id: str
     delete_from_server: bool
     chunk_selectors: _containers.RepeatedCompositeFieldContainer[ChunkSelector]
+    dense_view_codec: str
     def __init__(
         self,
         hist_id: _Optional[str] = ...,
         delete_from_server: bool = ...,
         chunk_selectors: _Optional[_Iterable[_Union[ChunkSelector, _Mapping]]] = ...,
+        dense_view_codec: _Optional[str] = ...,
     ) -> None: ...
 
 class SnapshotResponse(_message.Message):
