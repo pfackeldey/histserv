@@ -7,7 +7,7 @@ import pytest
 from hist import Hist
 
 from histserv.chunked_hist import ChunkedHist
-from histserv.client import Client
+from histserv.client import Client, RemoteHist
 from histserv.protos import hist_pb2
 from tests.histogram_fixtures import (
     CategoricalHistCase,
@@ -313,6 +313,37 @@ def test_init_preserves_existing_bin_yields(client: Client) -> None:
     remote_hist = client.init(local, token="alice")
     np.testing.assert_equal(
         remote_hist.snapshot().to_hist().view(flow=True), local.view(flow=True)
+    )
+
+
+def test_client_connect_reconnects_existing_hist(client: Client) -> None:
+    remote_hist = client.init(regular_hist(), token="alice")
+    remote_hist.fill(x=np.array([0.25, 1.5, 3.75], dtype=np.float32))
+
+    reconnect = client.connect(remote_hist.hist_id, token=remote_hist.token)
+
+    assert reconnect.client.address == client.address
+    assert reconnect.hist_id == remote_hist.hist_id
+    assert reconnect.token == remote_hist.token
+    np.testing.assert_equal(
+        reconnect.snapshot().to_hist().view(flow=True),
+        remote_hist.snapshot().to_hist().view(flow=True),
+    )
+
+
+def test_remote_hist_can_reconnect_from_connection_info(client: Client) -> None:
+    remote_hist = client.init(regular_hist(), token="alice")
+    remote_hist.fill(x=np.array([0.25, 1.5, 3.75], dtype=np.float32))
+
+    connection_info = remote_hist.get_connection_info()
+    reconnect = RemoteHist.from_connection_info(connection_info)
+
+    assert reconnect.client.address == client.address
+    assert reconnect.hist_id == remote_hist.hist_id
+    assert reconnect.token == remote_hist.token
+    np.testing.assert_equal(
+        reconnect.snapshot().to_hist().view(flow=True),
+        remote_hist.snapshot().to_hist().view(flow=True),
     )
 
 

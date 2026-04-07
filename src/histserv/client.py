@@ -48,6 +48,12 @@ class StatsDict(_StatsBaseDict, total=False):
     token_scoped: TokenScopedStatsDict
 
 
+class ConnectionInfoDict(TypedDict):
+    address: str
+    hist_id: str
+    token: str | None
+
+
 FillCompression = Literal["zstd", "lz4"]
 
 
@@ -271,6 +277,33 @@ class RemoteHist:
             ")"
         )
 
+    @classmethod
+    def from_connection_info(
+        cls,
+        connection_info: ConnectionInfoDict,
+        *,
+        timeout: int = 10,
+    ) -> RemoteHist:
+        """Reconnect a remote histogram from serialized connection info.
+
+        Args:
+            connection_info: Output from `get_connection_info()`.
+            timeout: RPC timeout in seconds for the reconnect `Describe` call.
+
+        Returns:
+            A fully connected `RemoteHist`.
+
+        Example:
+            >>> info = remote_hist.get_connection_info()
+            >>> reconnect = RemoteHist.from_connection_info(info)
+        """
+        client = Client(connection_info["address"])
+        return client.connect(
+            connection_info["hist_id"],
+            token=connection_info["token"],
+            timeout=timeout,
+        )
+
     def __getitem__(
         self,
         selection: Mapping[str, ChunkScalar | tp.Iterable[ChunkScalar]],
@@ -296,17 +329,21 @@ class RemoteHist:
             ),
         )
 
-    def get_connection_info(self) -> dict[str, str | None]:
+    def get_connection_info(self) -> ConnectionInfoDict:
         """Return reconnect information for this remote histogram.
 
         Returns:
-            A dictionary containing the histogram id and token.
+            A dictionary containing the server address, histogram id, and token.
 
         Example:
             >>> info = remote_hist.get_connection_info()
-            >>> reconnect = client.connect(info["hist_id"], token=info["token"])
+            >>> reconnect = RemoteHist.from_connection_info(info)
         """
-        return {"hist_id": self.hist_id, "token": self.token}
+        return {
+            "address": self.client.address,
+            "hist_id": self.hist_id,
+            "token": self.token,
+        }
 
     def _make_dense_hist(self) -> Hist:
         return Hist(
