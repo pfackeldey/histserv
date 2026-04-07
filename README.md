@@ -108,6 +108,7 @@ Useful client methods on `RemoteHist`:
 - `reset()`
 - `exists()`
 - `get_connection_info()`
+- `RemoteHist.from_connection_info(...)`
 - `flush(destination="hist.h5")`
 - `delete()`
 

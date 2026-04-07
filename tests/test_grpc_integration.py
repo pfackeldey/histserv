@@ -481,6 +481,7 @@ def test_get_connection_info_returns_reconnectable_payload(client: Client) -> No
     remote_hist = client.init(regular_hist(), token="alice")
 
     assert remote_hist.get_connection_info() == {
+        "address": client.address,
         "hist_id": remote_hist.hist_id,
         "token": "alice",
     }
@@ -489,7 +490,7 @@ def test_get_connection_info_returns_reconnectable_payload(client: Client) -> No
 def test_connect_round_trip_via_connection_info(client: Client) -> None:
     remote_hist = client.init(regular_hist(), token="alice")
     connection_info = remote_hist.get_connection_info()
-    reconnected = client.connect(**connection_info)
+    reconnected = RemoteHist.from_connection_info(connection_info)
 
     remote_hist.fill(x=np.array([0.25, 1.5], dtype=np.float32))
     reconnected.fill(x=np.array([3.25], dtype=np.float32))

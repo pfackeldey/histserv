@@ -4,7 +4,7 @@ import grpc
 import hist
 import numpy as np
 
-from histserv import Client
+from histserv import Client, RemoteHist
 
 
 def main() -> None:
@@ -46,7 +46,15 @@ def main() -> None:
         connection_info = remote_hist.get_connection_info()
         print("Connection info:", connection_info)
 
-        reconnected = client.connect(**connection_info)
+        # Reconnect using an existing client
+        reconnected_direct = client.connect(
+            remote_hist.hist_id,
+            token=remote_hist.token,
+        )
+        print("Direct reconnect exists:", reconnected_direct.exists())
+
+        # Reconnect using the histogram's connection info
+        reconnected = RemoteHist.from_connection_info(connection_info)
         reconnected.fill(
             x=np.array([2.0], dtype=np.float64),
             dataset="data",
