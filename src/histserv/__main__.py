@@ -45,6 +45,12 @@ async def main() -> None:
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Logging verbosity.",
     )
+    ap.add_argument(
+        "--dashboard-port",
+        default=None,
+        type=int,
+        help="If set, start the observability dashboard HTTP server on this port.",
+    )
 
     args = ap.parse_args()
     configure_logging(level=getattr(logging, args.log_level))
@@ -54,18 +60,21 @@ async def main() -> None:
         prune_after=timedelta(seconds=args.prune_after_seconds),
         prune_interval=timedelta(seconds=args.prune_interval_seconds),
         stats_interval=timedelta(seconds=args.stats_interval_seconds),
+        dashboard_port=args.dashboard_port,
     )
 
     server = Server(options=options)
     await server.start()
+    dashboard_info = f", dashboard_port={options.dashboard_port}" if options.dashboard_port else ""
     logger.info(
         "server (listening at %s) started with port=%s, "
-        "prune_after=%s, prune_interval=%s, stats_interval=%s",
+        "prune_after=%s, prune_interval=%s, stats_interval=%s%s",
         server.address,
         options.port,
         timedelta_repr(options.prune_after),
         timedelta_repr(options.prune_interval),
         timedelta_repr(options.stats_interval),
+        dashboard_info,
     )
     try:
         await server.wait_for_termination()
