@@ -31,6 +31,8 @@ class ServerOptions:
             raise ValueError("stats_interval must be positive")
         if self.dashboard_port is not None and not 0 <= self.dashboard_port <= 0xFFFF:
             raise ValueError("dashboard_port must be between 0 and 65535")
+        if self.dashboard_port == self.port:
+            raise ValueError("dashboard_port and port can't be the same")
 
 
 class Server:
