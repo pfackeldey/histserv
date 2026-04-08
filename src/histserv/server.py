@@ -17,6 +17,8 @@ class ServerOptions:
     prune_after: timedelta = timedelta(days=1)
     prune_interval: timedelta = timedelta(minutes=5)
     stats_interval: timedelta = timedelta(seconds=5)
+    # If set, start the observability dashboard on this HTTP port alongside gRPC.
+    dashboard_port: int | None = None
 
     def __post_init__(self) -> None:
         if not 0 <= self.port <= 0xFFFF:
@@ -27,6 +29,8 @@ class ServerOptions:
             raise ValueError("prune_interval must be positive")
         if self.stats_interval.total_seconds() <= 0:
             raise ValueError("stats_interval must be positive")
+        if self.dashboard_port is not None and not 0 <= self.dashboard_port <= 0xFFFF:
+            raise ValueError("dashboard_port must be between 0 and 65535")
 
 
 class Server:
@@ -81,7 +85,31 @@ class Server:
                 name="print_hists_stats",
             ),
         ]
+
+        if self.options.dashboard_port is not None:
+            self._callbacks.append(
+                asyncio.create_task(
+                    self._start_dashboard(self.options.dashboard_port),
+                    name="dashboard",
+                )
+            )
+
         self._started = True
+
+    async def _start_dashboard(self, port: int) -> None:
+        import uvicorn
+
+        from histserv.dashboard import create_app
+
+        app = create_app(self.histogrammer)
+        config = uvicorn.Config(
+            app=app,
+            host="0.0.0.0",
+            port=port,
+            log_level="warning",
+        )
+        server = uvicorn.Server(config)
+        await server.serve()
 
     async def stop(self, grace: float | None = None) -> None:
         if not self._started:
