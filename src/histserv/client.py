@@ -103,7 +103,10 @@ class Client:
         return grpc.insecure_channel(
             self.address,
             compression=grpc.Compression.NoCompression,
-            options=[("grpc.max_send_message_length", 1 << 29)],
+            options=[
+                ("grpc.max_send_message_length", 1 << 29),  # 0.5GB
+                ("grpc.max_receive_message_length", -1),  # .snapshot
+            ],
         )
 
     @cached_property

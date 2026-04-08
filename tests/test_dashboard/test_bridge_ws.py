@@ -98,9 +98,7 @@ class TestWebSocketProtocol:
         assert msg["type"] == "hist_data"
         assert msg["payload"]["hist_id"] == hist_id
 
-    def test_get_hist_unknown_id_returns_error(
-        self, app_client: TestClient
-    ) -> None:
+    def test_get_hist_unknown_id_returns_error(self, app_client: TestClient) -> None:
         with app_client.websocket_connect("/ws") as ws:
             ws.send_json({"type": "get_hist", "payload": {"hist_id": "doesnotexist"}})
             msg = ws.receive_json()

@@ -22,7 +22,9 @@ def app_client(histogrammer: Histogrammer) -> TestClient:
     return TestClient(app)
 
 
-def _add_hist(histogrammer: Histogrammer, h: hist.Hist, token: str | None = None) -> str:
+def _add_hist(
+    histogrammer: Histogrammer, h: hist.Hist, token: str | None = None
+) -> str:
     """Directly insert a histogram into the histogrammer, returns hist_id."""
     from datetime import datetime, timezone
     import uuid

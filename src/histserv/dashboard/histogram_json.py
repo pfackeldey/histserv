@@ -13,10 +13,20 @@ def _axis_info_full(axis: object) -> dict:
     axis_type = type(axis).__name__
 
     if isinstance(axis, bh.axis.Boolean):
-        return {"name": name, "label": label, "type": axis_type, "labels": ["False", "True"]}
+        return {
+            "name": name,
+            "label": label,
+            "type": axis_type,
+            "labels": ["False", "True"],
+        }
 
     if isinstance(axis, bh.axis.IntCategory | bh.axis.StrCategory):
-        return {"name": name, "label": label, "type": axis_type, "labels": [str(k) for k in axis]}
+        return {
+            "name": name,
+            "label": label,
+            "type": axis_type,
+            "labels": [str(k) for k in axis],
+        }
 
     # Continuous axes (Regular, Variable, Integer) all expose .edges
     edges: list[float] = axis.edges.tolist()  # type: ignore[union-attr]

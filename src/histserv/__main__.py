@@ -65,7 +65,9 @@ async def main() -> None:
 
     server = Server(options=options)
     await server.start()
-    dashboard_info = f", dashboard_port={options.dashboard_port}" if options.dashboard_port else ""
+    dashboard_info = (
+        f", dashboard_port={options.dashboard_port}" if options.dashboard_port else ""
+    )
     logger.info(
         "server (listening at %s) started with port=%s, "
         "prune_after=%s, prune_interval=%s, stats_interval=%s%s",

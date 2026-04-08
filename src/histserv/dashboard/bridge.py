@@ -39,7 +39,9 @@ def _envelope(msg_type: str, payload: dict) -> dict:
     return {"type": msg_type, "ts": time.time(), "payload": payload}
 
 
-def create_app(histogrammer: Histogrammer, *, static_dir: Path | None = None) -> FastAPI:
+def create_app(
+    histogrammer: Histogrammer, *, static_dir: Path | None = None
+) -> FastAPI:
     """Create the FastAPI observability app.
 
     Args:
@@ -197,7 +199,13 @@ async def _push_to_client(
         if entry is None:
             # Histogram was deleted; notify client and clean up
             await state.websocket.send_json(
-                _envelope("error", {"message": f"histogram {hist_id} no longer exists", "code": "NOT_FOUND"})
+                _envelope(
+                    "error",
+                    {
+                        "message": f"histogram {hist_id} no longer exists",
+                        "code": "NOT_FOUND",
+                    },
+                )
             )
             state.hist_subscriptions.pop(hist_id, None)
             continue
@@ -245,7 +253,10 @@ async def _send_hist_data(
     entry = histogrammer._entries.get(hist_id)
     if entry is None:
         await state.websocket.send_json(
-            _envelope("error", {"message": f"histogram {hist_id} not found", "code": "NOT_FOUND"})
+            _envelope(
+                "error",
+                {"message": f"histogram {hist_id} not found", "code": "NOT_FOUND"},
+            )
         )
         return
     try:

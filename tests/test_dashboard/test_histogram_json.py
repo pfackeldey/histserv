@@ -120,7 +120,9 @@ class TestHistogramToPlotJson:
         assert result["version"] == expected_version
 
     def test_name_and_label_forwarded(self) -> None:
-        h = hist.Hist(hist.axis.Regular(4, 0, 4, name="x"), name="my_hist", label="My Histogram")
+        h = hist.Hist(
+            hist.axis.Regular(4, 0, 4, name="x"), name="my_hist", label="My Histogram"
+        )
         hist_id, entry = _make_entry(h)
 
         result = histogram_to_plot_json(hist_id, entry)
@@ -145,7 +147,9 @@ class TestHistogramToPlotJson:
 
 class TestHistogramSummary:
     def test_basic_fields(self) -> None:
-        h = hist.Hist(hist.axis.Regular(4, 0, 4, name="x", label="x-axis"), name="h", label="My H")
+        h = hist.Hist(
+            hist.axis.Regular(4, 0, 4, name="x", label="x-axis"), name="h", label="My H"
+        )
         hist_id, entry = _make_entry(h)
 
         result = histogram_summary(hist_id, entry)
