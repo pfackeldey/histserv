@@ -50,15 +50,15 @@ httpx = ">=0.27.0"
 serve = { cmd = "histserv --port 50051" }
 
 [feature.dashboard.tasks]
-dashboard-install = { cmd = "bun install", cwd = "dashboard/ui" }
-dashboard-dev = { cmd = "bun run dev", cwd = "dashboard/ui" }
-dashboard-build = { cmd = "bun run build", cwd = "dashboard/ui" }
-dashboard-test = { cmd = "bun run test", cwd = "dashboard/ui" }
-dashboard-lint = { cmd = "bun run lint", cwd = "dashboard/ui" }
-dashboard-format = { cmd = "bun run format", cwd = "dashboard/ui" }
-dashboard-format-check = { cmd = "bun run format:check", cwd = "dashboard/ui" }
-dashboard-check = { cmd = "bun run check", cwd = "dashboard/ui" }
-dashboard-serve = { cmd = "concurrently 'histserv --port 50051 --dashboard-port 8050' 'bun run dev'", cwd = "dashboard/ui" }
+dashboard-install = { cmd = "bun install", cwd = "src/histserv/dashboard/ui" }
+dashboard-dev = { cmd = "bun run dev", cwd = "src/histserv/dashboard/ui" }
+dashboard-build = { cmd = "bun run build", cwd = "src/histserv/dashboard/ui" }
+dashboard-test = { cmd = "bun run test", cwd = "src/histserv/dashboard/ui" }
+dashboard-lint = { cmd = "bun run lint", cwd = "src/histserv/dashboard/ui" }
+dashboard-format = { cmd = "bun run format", cwd = "src/histserv/dashboard/ui" }
+dashboard-format-check = { cmd = "bun run format:check", cwd = "src/histserv/dashboard/ui" }
+dashboard-check = { cmd = "bun run check", cwd = "src/histserv/dashboard/ui" }
+dashboard-serve = { cmd = "concurrently 'histserv --port 50051 --dashboard-port 8050' 'bun run dev'", cwd = "src/histserv/dashboard/ui" }
 
 [environments]
 dev = ["dev"]

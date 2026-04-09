@@ -87,6 +87,17 @@ exclude = [
 packages = ["src/histserv"]
 exclude = [
     "/example",
+    # dashboard/ui/ source — only dist/ is needed in the wheel
+    "src/histserv/dashboard/ui/src",
+    "src/histserv/dashboard/ui/node_modules",
+    "src/histserv/dashboard/ui/public",
+    "src/histserv/dashboard/ui/*.json",
+    "src/histserv/dashboard/ui/*.ts",
+    "src/histserv/dashboard/ui/*.js",
+    "src/histserv/dashboard/ui/*.html",
+    "src/histserv/dashboard/ui/*.lock",
+    "src/histserv/dashboard/ui/.*",
+    "src/histserv/dashboard/ui/README.md",
 ]
 
 [tool.hatch.build.hooks.custom]

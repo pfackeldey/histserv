@@ -7,18 +7,18 @@ repos:
         entry: pixi run dashboard-lint
         pass_filenames: false
         types_or: [ts, javascript]
-        files: ^dashboard/ui/src/
+        files: ^src/histserv/dashboard/ui/src/
 
       - id: dashboard-format-check
         name: dashboard format check (prettier)
         language: system
         entry: pixi run dashboard-format-check
         pass_filenames: false
-        files: ^dashboard/ui/src/
+        files: ^src/histserv/dashboard/ui/src/
 
       - id: dashboard-check
         name: dashboard type check (svelte-check)
         language: system
         entry: pixi run dashboard-check
         pass_filenames: false
-        files: ^dashboard/ui/src/
+        files: ^src/histserv/dashboard/ui/src/

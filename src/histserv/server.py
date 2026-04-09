@@ -105,12 +105,10 @@ class Server:
 
         from histserv.dashboard import create_app
 
-        # Dev/editable install: dashboard/ui/dist at repo root (3 levels above server.py)
-        _dev_dist = Path(__file__).resolve().parent.parent.parent / "dashboard" / "ui" / "dist"
-        # Wheel install: hatch build hook copies dist/ into src/histserv/dashboard/static/
-        _pkg_dist = Path(__file__).resolve().parent / "dashboard" / "static"
-
-        static_dir = next((p for p in (_dev_dist, _pkg_dist) if p.is_dir()), None)
+        # Works for both editable installs (src/histserv/dashboard/ui/dist) and
+        # wheel installs (histserv/dashboard/ui/dist inside site-packages).
+        _dist = Path(__file__).resolve().parent / "dashboard" / "ui" / "dist"
+        static_dir = _dist if _dist.is_dir() else None
         app = create_app(self.histogrammer, static_dir=static_dir)
         config = uvicorn.Config(
             app=app,
