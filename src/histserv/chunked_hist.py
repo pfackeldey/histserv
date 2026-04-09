@@ -427,7 +427,7 @@ class ChunkedHist:
 
         return merged
 
-    def metadata_json(self) -> str:
+    def _metadata_dict_for_axes(self, axes: Iterable[tp.Any]) -> dict[str, tp.Any]:
         storage_schema = {
             key: value
             for key, value in _storage_to_dict(
@@ -436,17 +436,24 @@ class ChunkedHist:
             ).items()
             if not isinstance(value, np.ndarray)
         }
-        return json.dumps(
-            {
-                "uhi_schema": 1,
-                "axes": [_axis_to_dict(axis) for axis in self.axes],
-                "storage": storage_schema,
-                "metadata": serialize_metadata(
-                    {"name": self.name, "label": self.label}
-                ),
-            },
-            default=uhi.io.json.default,
-        )
+        return {
+            "uhi_schema": 1,
+            "axes": [_axis_to_dict(axis) for axis in axes],
+            "storage": storage_schema,
+            "metadata": serialize_metadata({"name": self.name, "label": self.label}),
+        }
+
+    def metadata_dict(self) -> dict[str, tp.Any]:
+        return self._metadata_dict_for_axes(self.axes)
+
+    def dense_metadata_dict(self) -> dict[str, tp.Any]:
+        return self._metadata_dict_for_axes(self.dense_axes)
+
+    def metadata_json(self) -> str:
+        return json.dumps(self.metadata_dict(), default=uhi.io.json.default)
+
+    def dense_metadata_json(self) -> str:
+        return json.dumps(self.dense_metadata_dict(), default=uhi.io.json.default)
 
     @classmethod
     def from_metadata_json(
@@ -488,6 +495,59 @@ class ChunkedHist:
             for axis_name, values in key_lists.items()
         }
 
+    def _normalize_selection(
+        self,
+        selection: Mapping[str, ChunkScalar | tp.Iterable[ChunkScalar]],
+    ) -> dict[str, tuple[ChunkScalar, ...]]:
+        return normalize_chunk_selection(
+            selection,
+            axis_names=(axis.name for axis in self.axes),
+            chunk_axis_names=self.chunk_axis_names,
+        )
+
+    def _exact_chunk_key(
+        self,
+        normalized: Mapping[str, tuple[ChunkScalar, ...]],
+    ) -> ChunkKey | None:
+        if set(normalized) != set(self.chunk_axis_names):
+            return None
+        if not all(len(values) == 1 for values in normalized.values()):
+            return None
+        return tuple(normalized[axis_name][0] for axis_name in self.chunk_axis_names)
+
+    def exact_chunk_key(
+        self,
+        selection: Mapping[str, ChunkScalar | tp.Iterable[ChunkScalar]],
+    ) -> ChunkKey:
+        normalized = self._normalize_selection(selection)
+        exact_key = self._exact_chunk_key(normalized)
+        if exact_key is None:
+            raise ValueError(
+                "selection must provide exactly one value for each chunk axis"
+            )
+        return exact_key
+
+    def selection_dict(self, key: ChunkKey) -> dict[str, ChunkScalar]:
+        if len(key) != len(self.chunk_axis_names):
+            raise ValueError(
+                f"chunk key must have {len(self.chunk_axis_names)} values, got {len(key)}"
+            )
+        return {
+            axis_name: key[index]
+            for index, axis_name in enumerate(self.chunk_axis_names)
+        }
+
+    def chunk_view(
+        self,
+        selection: Mapping[str, ChunkScalar | tp.Iterable[ChunkScalar]],
+    ) -> np.ndarray:
+        chunk_key = self.exact_chunk_key(selection)
+        exact_selection = self.selection_dict(chunk_key)
+        try:
+            return self._chunks[chunk_key]
+        except KeyError as exc:
+            raise KeyError(f"chunk selection {exact_selection!r} not found") from exc
+
     def __getitem__(
         self,
         selection: Mapping[str, ChunkScalar | tp.Iterable[ChunkScalar]],
@@ -509,11 +569,7 @@ class ChunkedHist:
             >>> h.fill(x=[0.4], cat="b")
             >>> only_a = h[{"cat": "a"}]
         """
-        normalized = normalize_chunk_selection(
-            selection,
-            axis_names=(axis.name for axis in self.axes),
-            chunk_axis_names=self.chunk_axis_names,
-        )
+        normalized = self._normalize_selection(selection)
         selected = {name: frozenset(values) for name, values in normalized.items()}
         matching_keys = [
             key

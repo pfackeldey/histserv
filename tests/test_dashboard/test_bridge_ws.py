@@ -68,6 +68,7 @@ class TestWebSocketProtocol:
         assert any(item["hist_id"] == hist_id for item in items)
         item = next(i for i in items if i["hist_id"] == hist_id)
         assert item["name"] == "myhist"
+        assert item["chunk_axes"] == []
 
     def test_subscribe_hist_returns_hist_data(
         self, app_client: TestClient, histogrammer: Histogrammer
@@ -77,13 +78,68 @@ class TestWebSocketProtocol:
         hist_id = _add_hist(histogrammer, h)
 
         with app_client.websocket_connect("/ws") as ws:
+            ws.send_json(
+                {
+                    "type": "subscribe_hist",
+                    "payload": {"hist_id": hist_id, "selection": {}},
+                }
+            )
+            meta = ws.receive_json()
+            data = ws.receive_json()
+
+        assert meta["type"] == "hist_meta"
+        assert meta["payload"]["hist_id"] == hist_id
+        assert len(meta["payload"]["dense_metadata"]["axes"]) == 1
+
+        assert data["type"] == "hist_data"
+        assert data["payload"]["hist_id"] == hist_id
+        assert data["payload"]["selection"] == {}
+        assert "values" in data["payload"]
+
+    def test_subscribe_hist_requires_selection(
+        self, app_client: TestClient, histogrammer: Histogrammer
+    ) -> None:
+        h = hist.Hist(hist.axis.Regular(4, 0, 4, name="x"))
+        hist_id = _add_hist(histogrammer, h)
+
+        with app_client.websocket_connect("/ws") as ws:
             ws.send_json({"type": "subscribe_hist", "payload": {"hist_id": hist_id}})
             msg = ws.receive_json()
 
-        assert msg["type"] == "hist_data"
-        assert msg["payload"]["hist_id"] == hist_id
-        assert "values" in msg["payload"]
-        assert len(msg["payload"]["axes"]) == 1
+        assert msg["type"] == "error"
+        assert msg["payload"]["code"] == "INVALID_SELECTION"
+
+    def test_subscribe_hist_slice_returns_dense_chunk(
+        self, app_client: TestClient, histogrammer: Histogrammer
+    ) -> None:
+        h = hist.Hist(
+            hist.axis.Regular(4, 0, 4, name="x"),
+            hist.axis.StrCategory(["a", "b"], name="cat"),
+        )
+        h.fill(x=[0.5, 1.5], cat=["a", "b"])
+        hist_id = _add_hist(histogrammer, h)
+
+        with app_client.websocket_connect("/ws") as ws:
+            ws.send_json(
+                {
+                    "type": "subscribe_hist",
+                    "payload": {"hist_id": hist_id, "selection": {"cat": "a"}},
+                }
+            )
+            meta = ws.receive_json()
+            data = ws.receive_json()
+
+        assert meta["type"] == "hist_meta"
+        assert meta["payload"]["chunk_axes"] == [
+            {
+                "name": "cat",
+                "label": "cat",
+                "type": "category_str",
+                "categories": ["a", "b"],
+            }
+        ]
+        assert data["type"] == "hist_data"
+        assert data["payload"]["selection"] == {"cat": "a"}
 
     def test_get_hist_one_shot(
         self, app_client: TestClient, histogrammer: Histogrammer
@@ -92,11 +148,19 @@ class TestWebSocketProtocol:
         hist_id = _add_hist(histogrammer, h)
 
         with app_client.websocket_connect("/ws") as ws:
-            ws.send_json({"type": "get_hist", "payload": {"hist_id": hist_id}})
-            msg = ws.receive_json()
+            ws.send_json(
+                {
+                    "type": "get_hist",
+                    "payload": {"hist_id": hist_id, "selection": {}},
+                }
+            )
+            meta = ws.receive_json()
+            data = ws.receive_json()
 
-        assert msg["type"] == "hist_data"
-        assert msg["payload"]["hist_id"] == hist_id
+        assert meta["type"] == "hist_meta"
+        assert data["type"] == "hist_data"
+        assert data["payload"]["hist_id"] == hist_id
+        assert data["payload"]["selection"] == {}
 
     def test_get_hist_unknown_id_returns_error(self, app_client: TestClient) -> None:
         with app_client.websocket_connect("/ws") as ws:
@@ -113,12 +177,22 @@ class TestWebSocketProtocol:
         hist_id = _add_hist(histogrammer, h)
 
         with app_client.websocket_connect("/ws") as ws:
-            ws.send_json({"type": "subscribe_hist", "payload": {"hist_id": hist_id}})
-            msg = ws.receive_json()
-            assert msg["type"] == "hist_data"
+            ws.send_json(
+                {
+                    "type": "subscribe_hist",
+                    "payload": {"hist_id": hist_id, "selection": {}},
+                }
+            )
+            assert ws.receive_json()["type"] == "hist_meta"
+            assert ws.receive_json()["type"] == "hist_data"
 
             # Unsubscribe; no more messages should arrive for this hist
-            ws.send_json({"type": "unsubscribe_hist", "payload": {"hist_id": hist_id}})
+            ws.send_json(
+                {
+                    "type": "unsubscribe_hist",
+                    "payload": {"hist_id": hist_id, "selection": {}},
+                }
+            )
             # Subscribe stats to get another message (proves connection is still alive)
             ws.send_json({"type": "subscribe", "payload": {"streams": ["stats"]}})
             msg2 = ws.receive_json()

@@ -210,6 +210,43 @@ def test_chunked_hist_getitem_returns_selected_chunked_hist() -> None:
     np.testing.assert_equal(sliced_hist.sum(flow=True), 2.0)
 
 
+def test_chunked_hist_exact_chunk_key_normalizes_selection_to_chunk_axis_order() -> (
+    None
+):
+    source = ChunkedHist(
+        hist.axis.Regular(4, 0, 4, name="x"),
+        hist.axis.IntCategory([], growth=True, name="cat"),
+        hist.axis.StrCategory([], growth=True, name="var"),
+    )
+    source.fill(x=np.array([0.5], dtype=np.float64), cat=1, var="a")
+
+    chunk_key = source.exact_chunk_key({"var": "a", "cat": 1})
+
+    assert chunk_key == (1, "a")
+    assert source.selection_dict(chunk_key) == {"cat": 1, "var": "a"}
+
+
+def test_chunked_hist_chunk_view_returns_selected_chunk_view() -> None:
+    source = ChunkedHist(
+        hist.axis.Regular(4, 0, 4, name="x"),
+        hist.axis.IntCategory([], growth=True, name="cat"),
+        hist.axis.StrCategory([], growth=True, name="var"),
+    )
+    source.fill(x=np.array([0.5], dtype=np.float64), cat=1, var="a")
+
+    chunk_view = source.chunk_view({"var": "a", "cat": 1})
+
+    np.testing.assert_equal(
+        chunk_view,
+        np.array([0.0, 1.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float64),
+    )
+
+    with pytest.raises(
+        KeyError, match=r"chunk selection \{'cat': 1, 'var': 'missing'\} not found"
+    ):
+        source.chunk_view({"cat": 1, "var": "missing"})
+
+
 @pytest.mark.parametrize(
     "case",
     categorical_hist_cases(),

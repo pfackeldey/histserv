@@ -114,7 +114,8 @@ The dashboard port exposes:
 
 | Path | Description |
 |------|-------------|
-| `GET /api/histograms/{hist_id}` | One-shot JSON snapshot of a histogram |
+| `GET /api/histograms/{hist_id}/metadata` | Histogram metadata including chunk-axis categories |
+| `GET /api/histograms/{hist_id}` | One-shot JSON snapshot of a selected dense chunk |
 | `WS  /ws` | Subscription-based streaming protocol (primary) |
 | `/*` | Serves the built Svelte frontend (production only) |
 
@@ -131,18 +132,27 @@ All messages share an envelope:
 | type | payload | description |
 |------|---------|-------------|
 | `subscribe` | `{ "streams": ["stats", "hist_list"] }` | Periodic server stats and histogram list |
-| `subscribe_hist` | `{ "hist_id": "…", "rate_limit_hz": 1 }` | Stream a specific histogram |
-| `unsubscribe_hist` | `{ "hist_id": "…" }` | Stop streaming a histogram |
-| `get_hist` | `{ "hist_id": "…" }` | One-shot histogram fetch |
+| `subscribe_hist` | `{ "hist_id": "…", "selection": { "dataset": "data" }, "rate_limit_hz": 1 }` | Stream one dense chunk |
+| `unsubscribe_hist` | `{ "hist_id": "…", "selection": { "dataset": "data" } }` | Stop streaming one dense chunk |
+| `get_hist` | `{ "hist_id": "…", "selection": { "dataset": "data" } }` | One-shot dense chunk fetch |
 
 **Server → client**
 
 | type | description |
 |------|-------------|
 | `stats` | Server health (uptime, rpc counts, cpu, memory) — ~1 s |
-| `hist_list` | All histogram summaries — ~2 s |
-| `hist_data` | Full histogram payload (axes, values, variances) |
+| `hist_list` | Live histogram summaries, including current chunk-axis categories — ~2 s |
+| `hist_meta` | One-shot dense histogram schema for a selected histogram |
+| `hist_data` | Dense chunk payload (`selection`, `values`, `version`) |
 | `error` | `{ "message": "…", "code": "NOT_FOUND" \| "INTERNAL" }` |
+
+Dashboard histogram fetches always require a full chunk selection expressed as a
+JSON object keyed by chunk-axis name. For histograms without chunk axes, the
+selection is the empty object encoded as `{}`:
+
+```text
+/api/histograms/<hist_id>?selection=%7B%7D
+```
 
 ## Examples
 
