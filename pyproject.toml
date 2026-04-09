@@ -82,6 +82,9 @@ version.path = "src/histserv/__init__.py"
 exclude = [
     "/example",
 ]
+# dist/ is gitignored but must travel in the sdist so the wheel build
+# (which unpacks the sdist into a temp dir) can find the pre-built assets.
+force-include = {"src/histserv/dashboard/ui/dist" = "src/histserv/dashboard/ui/dist"}
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/histserv"]
