@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
+from pathlib import Path
 
 import grpc
 
@@ -104,7 +105,13 @@ class Server:
 
         from histserv.dashboard import create_app
 
-        app = create_app(self.histogrammer)
+        # Dev/editable install: dashboard/ui/dist at repo root (3 levels above server.py)
+        _dev_dist = Path(__file__).resolve().parent.parent.parent / "dashboard" / "ui" / "dist"
+        # Wheel install: hatch build hook copies dist/ into src/histserv/dashboard/static/
+        _pkg_dist = Path(__file__).resolve().parent / "dashboard" / "static"
+
+        static_dir = next((p for p in (_dev_dist, _pkg_dist) if p.is_dir()), None)
+        app = create_app(self.histogrammer, static_dir=static_dir)
         config = uvicorn.Config(
             app=app,
             host="0.0.0.0",
