@@ -8,7 +8,6 @@ preview = ["pixi-build"]
 
 [dependencies]
 histserv = { path = "./" }
-python-build = ">=1.4.2,<2"
 
 [package]
 name = "histserv"
@@ -33,7 +32,6 @@ grpcio-tools = ">=1.78.0"
 
 [feature.dev.dependencies]
 pre-commit = ">=4"
-python-build = "*"
 
 [feature.dev.tasks]
 lint = "pre-commit run --all-files"
