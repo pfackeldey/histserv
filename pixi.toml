@@ -33,8 +33,8 @@ concurrently = "*"
 bun = ">=1.3.11,<2"
 
 [feature.package.tasks]
-serve = { cmd = "histserv --port 50051", depends-on = [{ task = "dashboard-bundle", environment = "dashboard" }] }
-dashboard-serve = { cmd = "concurrently 'histserv --port 50051 --dashboard-port 8050' 'bun run dev'", cwd = "src/histserv/dashboard/ui", depends-on = [{ task = "dashboard-bundle", environment = "dashboard" }] }
+serve = { cmd = "histserv --port 50051", depends-on = ["dashboard-bundle"] }
+dashboard-serve = { cmd = "concurrently 'histserv --port 50051 --dashboard-port 8050' 'bun run dev'", cwd = "src/histserv/dashboard/ui", depends-on = ["dashboard-bundle"] }
 
 [feature.dev.dependencies]
 pre-commit = ">=4"
@@ -51,14 +51,14 @@ httpx = ">=0.27.0"
 
 [feature.dashboard.tasks]
 dashboard-install = { cmd = "bun install", cwd = "src/histserv/dashboard/ui" }
-dashboard-dev = { cmd = "bun run dev", cwd = "src/histserv/dashboard/ui" }
-dashboard-build = { cmd = "bun run build", cwd = "src/histserv/dashboard/ui" }
-dashboard-test = { cmd = "bun run test", cwd = "src/histserv/dashboard/ui" }
-dashboard-lint = { cmd = "bun run lint", cwd = "src/histserv/dashboard/ui" }
-dashboard-format = { cmd = "bun run format", cwd = "src/histserv/dashboard/ui" }
-dashboard-format-check = { cmd = "bun run format:check", cwd = "src/histserv/dashboard/ui" }
-dashboard-check = { cmd = "bun run check", cwd = "src/histserv/dashboard/ui" }
-dashboard-bundle = { depends-on = [{ task = "dashboard-build", environment = "dashboard" }, { task = "dashboard-install", environment = "dashboard" }] }
+dashboard-dev = { cmd = "bun run dev", cwd = "src/histserv/dashboard/ui", depends-on = ["dashboard-install"] }
+dashboard-build = { cmd = "bun run build", cwd = "src/histserv/dashboard/ui", depends-on = ["dashboard-install"] }
+dashboard-test = { cmd = "bun run test", cwd = "src/histserv/dashboard/ui", depends-on = ["dashboard-install"] }
+dashboard-lint = { cmd = "bun run lint", cwd = "src/histserv/dashboard/ui", depends-on = ["dashboard-install"] }
+dashboard-format = { cmd = "bun run format", cwd = "src/histserv/dashboard/ui", depends-on = ["dashboard-install"] }
+dashboard-format-check = { cmd = "bun run format:check", cwd = "src/histserv/dashboard/ui", depends-on = ["dashboard-install"] }
+dashboard-check = { cmd = "bun run check", cwd = "src/histserv/dashboard/ui", depends-on = ["dashboard-install"] }
+dashboard-bundle = { depends-on = ["dashboard-build"] }
 
 [environments]
 dev = ["dev"]
