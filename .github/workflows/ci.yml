@@ -47,13 +47,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # Pre-build the dashboard UI so hatch_build.py finds dist/ during packaging.
+      # uv/hatchling don't know about bun, so we must do this before the Python build.
       - uses: prefix-dev/setup-pixi@v0
         with:
           pixi-version: latest
+          environments: dashboard
           cache: true
 
-      - name: Install frontend dependencies
-        run: pixi run dashboard-install
+      - name: Build dashboard UI
+        run: pixi run -e dashboard dashboard-bundle
 
       - name: Run ${{ matrix.check }}
         run: pixi run dashboard-${{ matrix.check }}
