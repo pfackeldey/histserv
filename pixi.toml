@@ -6,9 +6,6 @@ version = "0.1.0"
 authors = ["Giordon Stark"]
 preview = ["pixi-build"]
 
-[dependencies]
-histserv = { path = "./" }
-
 [package]
 name = "histserv"
 version = "latest"
@@ -30,6 +27,12 @@ uhi = ">=1.0.0"
 numcodecs = ">=0.13.1"
 grpcio-tools = ">=1.78.0"
 
+[feature.package.dependencies]
+histserv = { path = "./" }
+
+[feature.package.tasks]
+serve = { cmd = "histserv --port 50051" }
+
 [feature.dev.dependencies]
 pre-commit = ">=4"
 
@@ -43,9 +46,6 @@ nodejs = ">=20"
 fastapi = ">=0.115.0"
 uvicorn = ">=0.32.0"
 httpx = ">=0.27.0"
-
-[tasks]
-serve = { cmd = "histserv --port 50051" }
 
 [feature.dashboard.tasks]
 dashboard-install = { cmd = "bun install", cwd = "src/histserv/dashboard/ui" }
@@ -62,3 +62,4 @@ dashboard-serve = { cmd = "concurrently 'histserv --port 50051 --dashboard-port 
 [environments]
 dev = ["dev", "dashboard"]
 dashboard = ["dashboard"]
+package = ["package", "dashboard"]
