@@ -34,8 +34,8 @@ jobs:
           environments: dashboard
           cache: true
 
-      - name: Build dashboard UI
-        run: pixi run -e dashboard dashboard-bundle
+      - name: Bundle dashboard UI
+        run: pixi run dashboard-bundle
 
       - uses: hynek/build-and-inspect-python-package@v2
 
