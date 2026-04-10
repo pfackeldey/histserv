@@ -50,7 +50,7 @@ uvicorn = ">=0.32.0"
 httpx = ">=0.27.0"
 
 [feature.dashboard.tasks]
-dashboard-install = { cmd = "bun install", cwd = "src/histserv/dashboard/ui" }
+dashboard-install = { cmd = "bun install", cwd = "src/histserv/dashboard/ui", inputs = ["src/histserv/dashboard/ui/package.json"], outputs = ["src/histserv/dashboard/ui/node_modules"] }
 dashboard-dev = { cmd = "bun run dev", cwd = "src/histserv/dashboard/ui", depends-on = ["dashboard-install"] }
 dashboard-build = { cmd = "bun run build", cwd = "src/histserv/dashboard/ui", depends-on = ["dashboard-install"] }
 dashboard-test = { cmd = "bun run test", cwd = "src/histserv/dashboard/ui", depends-on = ["dashboard-install"] }
