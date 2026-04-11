@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
+import logging
+from pathlib import Path
 
 import grpc
 
@@ -104,7 +106,17 @@ class Server:
 
         from histserv.dashboard import create_app
 
-        app = create_app(self.histogrammer)
+        # Works for both editable installs (src/histserv/dashboard/ui/dist) and
+        # wheel installs (histserv/dashboard/ui/dist inside site-packages).
+        _dist = Path(__file__).resolve().parent / "dashboard" / "ui" / "dist"
+        static_dir = _dist if _dist.is_dir() else None
+        if static_dir is None:
+            logging.getLogger(__name__).warning(
+                "Dashboard UI not found at %s — serving API/WS only. "
+                "Run 'pixi run -e dashboard dashboard-build' to build the frontend.",
+                _dist,
+            )
+        app = create_app(self.histogrammer, static_dir=static_dir)
         config = uvicorn.Config(
             app=app,
             host="0.0.0.0",

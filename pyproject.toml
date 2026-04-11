@@ -82,12 +82,29 @@ version.path = "src/histserv/__init__.py"
 exclude = [
     "/example",
 ]
+# dist/ is gitignored but must travel in the sdist so the wheel build
+# (which unpacks the sdist into a temp dir) can find the pre-built assets.
+force-include = {"src/histserv/dashboard/ui/dist" = "src/histserv/dashboard/ui/dist"}
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/histserv"]
 exclude = [
     "/example",
+    # dashboard/ui/ source — only dist/ is needed in the wheel
+    "src/histserv/dashboard/ui/src",
+    "src/histserv/dashboard/ui/node_modules",
+    "src/histserv/dashboard/ui/public",
+    "src/histserv/dashboard/ui/*.json",
+    "src/histserv/dashboard/ui/*.ts",
+    "src/histserv/dashboard/ui/*.js",
+    "src/histserv/dashboard/ui/*.html",
+    "src/histserv/dashboard/ui/*.lock",
+    "src/histserv/dashboard/ui/.*",
+    "src/histserv/dashboard/ui/README.md",
 ]
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

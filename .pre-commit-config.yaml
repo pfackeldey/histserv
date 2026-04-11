@@ -1,0 +1,24 @@
+repos:
+  - repo: local
+    hooks:
+      - id: dashboard-lint
+        name: dashboard lint (eslint)
+        language: system
+        entry: pixi run -e dashboard dashboard-lint
+        pass_filenames: false
+        types_or: [ts, javascript]
+        files: ^src/histserv/dashboard/ui/src/
+
+      - id: dashboard-format-check
+        name: dashboard format check (prettier)
+        language: system
+        entry: pixi run -e dashboard dashboard-format-check
+        pass_filenames: false
+        files: ^src/histserv/dashboard/ui/src/
+
+      - id: dashboard-check
+        name: dashboard type check (svelte-check)
+        language: system
+        entry: pixi run -e dashboard dashboard-check
+        pass_filenames: false
+        files: ^src/histserv/dashboard/ui/src/

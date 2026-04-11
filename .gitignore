@@ -9,7 +9,11 @@ wheels/
 
 # Virtual environments
 .venv
+venv/
 uv.lock
+
+# macOS metadata
+.DS_Store
 
 # ruff
 .ruff_cache/
@@ -24,3 +28,7 @@ hist.h5
 # other
 ideas/
 benchmarks/
+
+# Frontend dashboard UI
+src/histserv/dashboard/ui/node_modules/
+src/histserv/dashboard/ui/dist/
