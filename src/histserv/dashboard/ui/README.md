@@ -1,10 +1,37 @@
 # histserv dashboard UI
 
+histserv includes an optional real-time observability dashboard.  It is a
+read-only web UI that shows server health, lists live histograms, and renders
+them as they are filled.
+
 A Vite + Svelte 5 + TypeScript single-page app with D3.js charts.  It connects to the histserv FastAPI bridge over WebSocket and REST to display real-time server health and histogram visualizations.
+
+
+### Install the dashboard extra
+
+```shell
+pip install "histserv[dashboard]"
+```
+
+This pulls in FastAPI, uvicorn, and httpx alongside the base install.
+
+### Start the server with the dashboard
+
+Pass `--dashboard-port` to expose the observability interface:
+
+```shell
+histserv --port 50051 --dashboard-port 8050
+```
+
+Open [http://localhost:8050](http://localhost:8050) in a browser (once a
+frontend bundle has been built; see below) or connect directly to the
+WebSocket at `ws://localhost:8050/ws`.
 
 ---
 
-## Prerequisites
+## Development
+
+### Prerequisites
 
 [pixi](https://pixi.sh) manages Node.js, bun, and pre-commit.
 
@@ -14,7 +41,7 @@ curl -fsSL https://pixi.sh/install.sh | bash
 
 ---
 
-## pixi task reference
+### pixi task reference
 
 All tasks are in the `dashboard` feature environment.  Run them with `pixi run -e dashboard <task>` from the repo root, or just `pixi run <task>` if the dashboard environment is active.
 
@@ -29,10 +56,6 @@ All tasks are in the `dashboard` feature environment.  Run them with `pixi run -
 | `dashboard-format-check` | `bun run format:check` | Prettier formatting check |
 | `dashboard-check` | `bun run check` | svelte-check + tsc |
 | `dashboard-serve` | start server + dev | Run histserv + Vite dev server together |
-
----
-
-## Development workflow
 
 ### Start everything together
 
@@ -53,9 +76,7 @@ histserv --port 50051 --dashboard-port 8050
 pixi run -e dashboard dashboard-dev
 ```
 
----
-
-## Testing
+### Testing
 
 ```shell
 pixi run -e dashboard dashboard-install
@@ -66,7 +87,7 @@ pixi run -e dashboard dashboard-test
 
 ---
 
-## Linting and formatting
+### Linting and formatting
 
 ```shell
 pixi run -e dashboard dashboard-lint      # ESLint
@@ -80,9 +101,7 @@ Or run all pre-commit hooks at once (from the repo root):
 pixi run -e dev lint
 ```
 
----
-
-## Production build
+### Production build
 
 ```shell
 pixi run -e dashboard dashboard-build     # outputs to dist/
@@ -122,6 +141,50 @@ src/
     websocket.test.ts
 ```
 
+## Network Architecture
+
 **WebSocket URL** is computed at runtime from `window.location.host` so it works on any port in production.  In dev, Vite proxies `/ws` to `ws://localhost:8050`.
 
-See [histserv README § Dashboard](../../../README.md) for the full server-side API and WebSocket protocol reference.
+The dashboard port exposes:
+
+| Path | Description |
+|------|-------------|
+| `GET /api/histograms/{hist_id}/metadata` | Histogram metadata including chunk-axis categories |
+| `GET /api/histograms/{hist_id}` | One-shot JSON snapshot of a selected dense chunk |
+| `WS  /ws` | Subscription-based streaming protocol (primary) |
+| `/*` | Serves the built Svelte frontend (production only) |
+
+### WebSocket protocol
+
+All messages share an envelope:
+
+```json
+{ "type": "string", "ts": 1712500000.123, "payload": { ... } }
+```
+
+**Client → server**
+
+| type | payload | description |
+|------|---------|-------------|
+| `subscribe` | `{ "streams": ["stats", "hist_list"] }` | Periodic server stats and histogram list |
+| `subscribe_hist` | `{ "hist_id": "…", "selection": { "dataset": "data" }, "rate_limit_hz": 1 }` | Stream one dense chunk |
+| `unsubscribe_hist` | `{ "hist_id": "…", "selection": { "dataset": "data" } }` | Stop streaming one dense chunk |
+| `get_hist` | `{ "hist_id": "…", "selection": { "dataset": "data" } }` | One-shot dense chunk fetch |
+
+**Server → client**
+
+| type | description |
+|------|-------------|
+| `stats` | Server health (uptime, rpc counts, cpu, memory) — ~1 s |
+| `hist_list` | Live histogram summaries, including current chunk-axis categories — ~2 s |
+| `hist_meta` | One-shot dense histogram schema for a selected histogram |
+| `hist_data` | Dense chunk payload (`selection`, `values`, `version`) |
+| `error` | `{ "message": "…", "code": "NOT_FOUND" \| "INTERNAL" }` |
+
+Dashboard histogram fetches always require a full chunk selection expressed as a
+JSON object keyed by chunk-axis name. For histograms without chunk axes, the
+selection is the empty object encoded as `{}`:
+
+```text
+/api/histograms/<hist_id>?selection=%7B%7D
+```

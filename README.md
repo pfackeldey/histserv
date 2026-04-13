@@ -86,73 +86,7 @@ Output in ipython:
 
 ## Dashboard
 
-histserv includes an optional real-time observability dashboard.  It is a
-read-only web UI that shows server health, lists live histograms, and renders
-them as they are filled.
-
-### Install the dashboard extra
-
-```shell
-pip install "histserv[dashboard]"
-```
-
-This pulls in FastAPI, uvicorn, and httpx alongside the base install.
-
-### Start the server with the dashboard
-
-Pass `--dashboard-port` to expose the observability interface:
-
-```shell
-histserv --port 50051 --dashboard-port 8050
-```
-
-Open [http://localhost:8050](http://localhost:8050) in a browser (once a
-frontend bundle has been built; see below) or connect directly to the
-WebSocket at `ws://localhost:8050/ws`.
-
-The dashboard port exposes:
-
-| Path | Description |
-|------|-------------|
-| `GET /api/histograms/{hist_id}/metadata` | Histogram metadata including chunk-axis categories |
-| `GET /api/histograms/{hist_id}` | One-shot JSON snapshot of a selected dense chunk |
-| `WS  /ws` | Subscription-based streaming protocol (primary) |
-| `/*` | Serves the built Svelte frontend (production only) |
-
-### WebSocket protocol
-
-All messages share an envelope:
-
-```json
-{ "type": "string", "ts": 1712500000.123, "payload": { ... } }
-```
-
-**Client → server**
-
-| type | payload | description |
-|------|---------|-------------|
-| `subscribe` | `{ "streams": ["stats", "hist_list"] }` | Periodic server stats and histogram list |
-| `subscribe_hist` | `{ "hist_id": "…", "selection": { "dataset": "data" }, "rate_limit_hz": 1 }` | Stream one dense chunk |
-| `unsubscribe_hist` | `{ "hist_id": "…", "selection": { "dataset": "data" } }` | Stop streaming one dense chunk |
-| `get_hist` | `{ "hist_id": "…", "selection": { "dataset": "data" } }` | One-shot dense chunk fetch |
-
-**Server → client**
-
-| type | description |
-|------|-------------|
-| `stats` | Server health (uptime, rpc counts, cpu, memory) — ~1 s |
-| `hist_list` | Live histogram summaries, including current chunk-axis categories — ~2 s |
-| `hist_meta` | One-shot dense histogram schema for a selected histogram |
-| `hist_data` | Dense chunk payload (`selection`, `values`, `version`) |
-| `error` | `{ "message": "…", "code": "NOT_FOUND" \| "INTERNAL" }` |
-
-Dashboard histogram fetches always require a full chunk selection expressed as a
-JSON object keyed by chunk-axis name. For histograms without chunk axes, the
-selection is the empty object encoded as `{}`:
-
-```text
-/api/histograms/<hist_id>?selection=%7B%7D
-```
+See more information about setting up the histserv dashboard in [the corresponding dashboard README](src/histserv/ui/README.md).
 
 ## Examples
 
