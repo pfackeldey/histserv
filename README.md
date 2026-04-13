@@ -86,7 +86,7 @@ Output in ipython:
 
 ## Dashboard
 
-See more information about setting up the histserv dashboard in [the corresponding dashboard README](src/histserv/ui/README.md).
+See more information about setting up the histserv dashboard in [the corresponding dashboard README](./src/histserv/dashboard/ui/README.md).
 
 ## Examples
 
