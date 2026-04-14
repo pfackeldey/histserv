@@ -500,6 +500,33 @@ class RemoteHist:
         )
         return response.exists
 
+    def was_filled_with_unique_id(
+        self, unique_id: tp.Any, *, timeout: int = 10
+    ) -> bool:
+        """Check whether this histogram has already been filled with `unique_id`.
+
+        Args:
+            unique_id: Idempotency key to check.
+            timeout: RPC timeout in seconds.
+
+        Returns:
+            `True` if a prior `fill()` or `fill_many()` used this `unique_id`,
+            else `False`.
+
+        Example:
+            >>> remote_hist.was_filled_with_unique_id(["foo", "bar"])
+            False
+        """
+        response = self.client.stub.WasFilledWithUniqueId(
+            hist_pb2.WasFilledWithUniqueIdRequest(
+                hist_id=self.hist_id,
+                unique_id=serialize_unique_id(unique_id),
+            ),
+            timeout=timeout,
+            metadata=self._metadata(),
+        )
+        return response.was_filled
+
     def snapshot(
         self,
         delete_from_server: bool = False,

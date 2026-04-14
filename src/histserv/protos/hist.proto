@@ -6,6 +6,7 @@ service HistogrammerService {
   rpc Init(InitRequest) returns (InitResponse) {}
   rpc Describe(DescribeRequest) returns (DescribeResponse) {}
   rpc Exists(ExistsRequest) returns (ExistsResponse) {}
+  rpc WasFilledWithUniqueId(WasFilledWithUniqueIdRequest) returns (WasFilledWithUniqueIdResponse) {}
   rpc Fill(FillRequest) returns (FillResponse) {}
   rpc FillMany(FillManyRequest) returns (FillResponse) {}
   rpc Snapshot(SnapshotRequest) returns (SnapshotResponse) {}
@@ -55,6 +56,15 @@ message ExistsRequest {
 
 message ExistsResponse {
   bool exists = 1;
+}
+
+message WasFilledWithUniqueIdRequest {
+  string hist_id = 1;
+  bytes unique_id = 2;
+}
+
+message WasFilledWithUniqueIdResponse {
+  bool was_filled = 1;
 }
 
 message FillRequest {

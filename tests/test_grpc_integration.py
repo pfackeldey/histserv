@@ -349,9 +349,14 @@ def test_remote_hist_can_reconnect_from_connection_info(client: Client) -> None:
 
 def test_remote_fill_reject_with_duped_unique_id(client: Client) -> None:
     remote_hist = client.init(regular_hist(), token="alice")
+    unique_id = ["foo", "bar"]
+
+    assert remote_hist.was_filled_with_unique_id(unique_id) is False
     remote_hist.fill(
-        x=np.array([0.25, 1.5, 3.75], dtype=np.float32), unique_id=["foo", "bar"]
+        x=np.array([0.25, 1.5, 3.75], dtype=np.float32), unique_id=unique_id
     )
+    assert remote_hist.was_filled_with_unique_id(unique_id) is True
+
     with pytest.raises(grpc.RpcError, match="StatusCode.ALREADY_EXISTS"):
         remote_hist.fill(
             x=np.array([0.25, 1.5, 3.75], dtype=np.float32), unique_id=["foo", "bar"]

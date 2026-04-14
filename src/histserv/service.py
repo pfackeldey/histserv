@@ -35,6 +35,7 @@ logger = get_logger("histserv")
 RPC_INIT: Final = "Init"
 RPC_DESCRIBE: Final = "Describe"
 RPC_EXISTS: Final = "Exists"
+RPC_WAS_FILLED_WITH_UNIQUE_ID: Final = "WasFilledWithUniqueId"
 RPC_FILL: Final = "Fill"
 RPC_FILL_MANY: Final = "FillMany"
 RPC_SNAPSHOT: Final = "Snapshot"
@@ -378,6 +379,26 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                     touch=False,
                 )
                 is not None
+            )
+        finally:
+            self._rpc_finished()
+
+    async def WasFilledWithUniqueId(
+        self,
+        request: hist_pb2.WasFilledWithUniqueIdRequest,
+        context: grpc.ServicerContext,
+    ) -> hist_pb2.WasFilledWithUniqueIdResponse:
+        request_token = self._request_token(context)
+        self._rpc_started(RPC_WAS_FILLED_WITH_UNIQUE_ID, request_token)
+        try:
+            entry = await self._require_entry(
+                context=context,
+                rpc_method=RPC_WAS_FILLED_WITH_UNIQUE_ID,
+                hist_id=request.hist_id,
+                request_token=request_token,
+            )
+            return hist_pb2.WasFilledWithUniqueIdResponse(
+                was_filled=request.unique_id in entry.unique_ids
             )
         finally:
             self._rpc_finished()

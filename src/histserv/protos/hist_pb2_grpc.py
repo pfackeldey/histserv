@@ -56,6 +56,12 @@ class HistogrammerServiceStub(object):
             response_deserializer=hist__pb2.ExistsResponse.FromString,
             _registered_method=True,
         )
+        self.WasFilledWithUniqueId = channel.unary_unary(
+            "/HistogrammerService/WasFilledWithUniqueId",
+            request_serializer=hist__pb2.WasFilledWithUniqueIdRequest.SerializeToString,
+            response_deserializer=hist__pb2.WasFilledWithUniqueIdResponse.FromString,
+            _registered_method=True,
+        )
         self.Fill = channel.unary_unary(
             "/HistogrammerService/Fill",
             request_serializer=hist__pb2.FillRequest.SerializeToString,
@@ -121,6 +127,12 @@ class HistogrammerServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def WasFilledWithUniqueId(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
     def Fill(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -180,6 +192,11 @@ def add_HistogrammerServiceServicer_to_server(servicer, server):
             servicer.Exists,
             request_deserializer=hist__pb2.ExistsRequest.FromString,
             response_serializer=hist__pb2.ExistsResponse.SerializeToString,
+        ),
+        "WasFilledWithUniqueId": grpc.unary_unary_rpc_method_handler(
+            servicer.WasFilledWithUniqueId,
+            request_deserializer=hist__pb2.WasFilledWithUniqueIdRequest.FromString,
+            response_serializer=hist__pb2.WasFilledWithUniqueIdResponse.SerializeToString,
         ),
         "Fill": grpc.unary_unary_rpc_method_handler(
             servicer.Fill,
@@ -307,6 +324,36 @@ class HistogrammerService(object):
             "/HistogrammerService/Exists",
             hist__pb2.ExistsRequest.SerializeToString,
             hist__pb2.ExistsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def WasFilledWithUniqueId(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/HistogrammerService/WasFilledWithUniqueId",
+            hist__pb2.WasFilledWithUniqueIdRequest.SerializeToString,
+            hist__pb2.WasFilledWithUniqueIdResponse.FromString,
             options,
             channel_credentials,
             insecure,

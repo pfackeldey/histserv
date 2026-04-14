@@ -84,6 +84,22 @@ class ExistsResponse(_message.Message):
     exists: bool
     def __init__(self, exists: bool = ...) -> None: ...
 
+class WasFilledWithUniqueIdRequest(_message.Message):
+    __slots__ = ("hist_id", "unique_id")
+    HIST_ID_FIELD_NUMBER: _ClassVar[int]
+    UNIQUE_ID_FIELD_NUMBER: _ClassVar[int]
+    hist_id: str
+    unique_id: bytes
+    def __init__(
+        self, hist_id: _Optional[str] = ..., unique_id: _Optional[bytes] = ...
+    ) -> None: ...
+
+class WasFilledWithUniqueIdResponse(_message.Message):
+    __slots__ = ("was_filled",)
+    WAS_FILLED_FIELD_NUMBER: _ClassVar[int]
+    was_filled: bool
+    def __init__(self, was_filled: bool = ...) -> None: ...
+
 class FillRequest(_message.Message):
     __slots__ = ("hist_id", "unique_id", "chunk_key", "dense_view", "dense_view_codec")
     HIST_ID_FIELD_NUMBER: _ClassVar[int]
