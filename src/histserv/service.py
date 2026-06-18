@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import resource
 import time
 import typing as tp
@@ -55,67 +56,48 @@ class LoggingInterceptor(grpc.aio.ServerInterceptor):
 
         async def logging_wrapper(request, context):
             started = time.perf_counter()
-            debug_enabled = logger.isEnabledFor(10)
-            error_enabled = logger.isEnabledFor(40)
+            debug_enabled = logger.isEnabledFor(logging.DEBUG)
+            error_enabled = logger.isEnabledFor(logging.ERROR)
             request_size = request.ByteSize() if (debug_enabled or error_enabled) else 0
+
+            def _log(level: int, msg: str) -> None:
+                hist_id = getattr(request, "hist_id", None)
+                if isinstance(hist_id, str) and hist_id:
+                    logger.log(
+                        level,
+                        fmt_rpc_logger_msg(
+                            rpc_method=rpc_method, hist_id=hist_id, msg=msg
+                        ),
+                    )
+                else:
+                    logger.log(
+                        level,
+                        fmt_rpc_logger_msg_no_hist_id(
+                            rpc_method=rpc_method, msg=msg
+                        ),
+                    )
 
             try:
                 response = await handler.unary_unary(request, context)
             except Exception:
                 if error_enabled:
                     duration = time.perf_counter() - started
-                    hist_id = getattr(request, "hist_id", None)
-                    if isinstance(hist_id, str) and hist_id:
-                        logger.error(
-                            fmt_rpc_logger_msg(
-                                rpc_method=rpc_method,
-                                hist_id=hist_id,
-                                msg=(
-                                    f"request={bytes_repr(request_size)}, "
-                                    f"duration={duration_repr(duration)}, "
-                                    "response=<error>"
-                                ),
-                            )
-                        )
-                    else:
-                        logger.error(
-                            fmt_rpc_logger_msg_no_hist_id(
-                                rpc_method=rpc_method,
-                                msg=(
-                                    f"request={bytes_repr(request_size)}, "
-                                    f"duration={duration_repr(duration)}, "
-                                    "response=<error>"
-                                ),
-                            )
-                        )
+                    _log(
+                        logging.ERROR,
+                        f"request={bytes_repr(request_size)}, "
+                        f"duration={duration_repr(duration)}, "
+                        "response=<error>",
+                    )
                 raise
 
             if debug_enabled:
                 duration = time.perf_counter() - started
-                hist_id = getattr(request, "hist_id", None)
-                if isinstance(hist_id, str) and hist_id:
-                    logger.debug(
-                        fmt_rpc_logger_msg(
-                            rpc_method=rpc_method,
-                            hist_id=hist_id,
-                            msg=(
-                                f"request={bytes_repr(request_size)}, "
-                                f"response={bytes_repr(response.ByteSize())}, "
-                                f"duration={duration_repr(duration)}"
-                            ),
-                        )
-                    )
-                else:
-                    logger.debug(
-                        fmt_rpc_logger_msg_no_hist_id(
-                            rpc_method=rpc_method,
-                            msg=(
-                                f"request={bytes_repr(request_size)}, "
-                                f"response={bytes_repr(response.ByteSize())}, "
-                                f"duration={duration_repr(duration)}"
-                            ),
-                        )
-                    )
+                _log(
+                    logging.DEBUG,
+                    f"request={bytes_repr(request_size)}, "
+                    f"response={bytes_repr(response.ByteSize())}, "
+                    f"duration={duration_repr(duration)}",
+                )
             return response
 
         return grpc.unary_unary_rpc_method_handler(
