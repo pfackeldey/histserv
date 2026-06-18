@@ -14,9 +14,10 @@ from fastapi.staticfiles import StaticFiles
 
 from histserv.chunked_hist import ChunkScalar
 from histserv.dashboard.histogram_json import (
+    capture_plot_json_inputs,
     histogram_metadata,
     histogram_summary,
-    histogram_to_plot_json,
+    to_plot_json,
 )
 from histserv.service import Histogrammer
 
@@ -70,8 +71,15 @@ def create_app(
 
     @contextlib.asynccontextmanager
     async def _lifespan(app: FastAPI):  # noqa: ARG001
-        asyncio.create_task(_push_loop(), name="dashboard_push_loop")
-        yield
+        # Keep a strong reference: a bare create_task() result can be GC'd
+        # mid-flight (see asyncio docs), silently killing the push loop.
+        push_task = asyncio.create_task(_push_loop(), name="dashboard_push_loop")
+        try:
+            yield
+        finally:
+            push_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await push_task
 
     app = FastAPI(title="histserv dashboard", lifespan=_lifespan)
 
@@ -105,12 +113,14 @@ def create_app(
                 _parse_selection_query(selection),
                 histogrammer,
             )
-            data = await asyncio.to_thread(
-                histogram_to_plot_json,
+            # Copy the chunk synchronously on the loop (atomic vs. gRPC fills),
+            # then offload only the .tolist() conversion to a worker thread.
+            inputs = capture_plot_json_inputs(
                 hist_request.hist_id,
                 entry,
                 selection=hist_request.selection,
             )
+            data = await asyncio.to_thread(to_plot_json, inputs)
         except KeyError:
             return JSONResponse({"error": "not found"}, status_code=404)
         except (TypeError, ValueError) as exc:
@@ -413,12 +423,14 @@ async def _send_hist_data(
         )
         return
     try:
-        data = await asyncio.to_thread(
-            histogram_to_plot_json,
+        # Copy the chunk synchronously on the loop (atomic vs. gRPC fills),
+        # then offload only the .tolist() conversion to a worker thread.
+        inputs = capture_plot_json_inputs(
             hist_request.hist_id,
             entry,
             selection=hist_request.selection,
         )
+        data = await asyncio.to_thread(to_plot_json, inputs)
     except KeyError:
         await _send_ws_error(state, message="not found", code="NOT_FOUND")
         return
