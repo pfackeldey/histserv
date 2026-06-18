@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import resource
+import os
 import time
 import typing as tp
 import uuid
@@ -285,7 +285,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 },
             )
 
-        usage = resource.getrusage(resource.RUSAGE_SELF)
+        times = os.times()
         observed_at = datetime.now(timezone.utc)
         return StatsSnapshot(
             histogram_count=len(entries),
@@ -293,8 +293,8 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
             active_rpcs=self._active_rpcs,
             version=__version__,
             uptime_seconds=int((observed_at - self._started_at).total_seconds()),
-            user_cpu_seconds=usage.ru_utime,
-            system_cpu_seconds=usage.ru_stime,
+            user_cpu_seconds=times.user,
+            system_cpu_seconds=times.system,
             rpc_calls_total=dict(self._rpc_calls_total),
             observed_at=observed_at,
             token_scoped=token_scoped,
