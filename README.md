@@ -137,6 +137,8 @@ Unsupported today:
 - transformed `hist.axis.Regular`
 - `boost_histogram.storage.Mean`
 - `boost_histogram.storage.WeightedMean`
+- overflow bins on `IntCategory`/`StrCategory` chunk axes are not preserved
+  across `from_hist()`/`to_hist()` (categorical overflow is silently dropped)
 
 Notes:
 - Growable categorical axes (`IntCategory`, `StrCategory`) are treated as

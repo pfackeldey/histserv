@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import resource
+import os
 import time
 import typing as tp
 import uuid
@@ -267,7 +268,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 },
             )
 
-        usage = resource.getrusage(resource.RUSAGE_SELF)
+        times = os.times()
         observed_at = datetime.now(timezone.utc)
         return StatsSnapshot(
             histogram_count=len(entries),
@@ -275,8 +276,8 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
             active_rpcs=self._active_rpcs,
             version=__version__,
             uptime_seconds=int((observed_at - self._started_at).total_seconds()),
-            user_cpu_seconds=usage.ru_utime,
-            system_cpu_seconds=usage.ru_stime,
+            user_cpu_seconds=times.user,
+            system_cpu_seconds=times.system,
             rpc_calls_total=dict(self._rpc_calls_total),
             observed_at=observed_at,
             token_scoped=token_scoped,
@@ -525,7 +526,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                     )
 
                 if request.delete_from_server:
-                    snapshot = self._entries.pop(hist_id).hist
+                    snapshot = entry.hist
                 elif request.chunk_selectors:
                     selection: dict[str, list[str | int]] = {}
                     for selector in request.chunk_selectors:
@@ -543,6 +544,12 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 else:
                     snapshot = entry.hist
 
+                payload = serialize_chunked_hist_payload(
+                    snapshot,
+                    codec=self._request_dense_view_codec(request),
+                )
+                if request.delete_from_server:
+                    self._entries.pop(hist_id, None)
                 logger.debug(
                     fmt_rpc_logger_msg(
                         rpc_method=RPC_SNAPSHOT,
@@ -550,12 +557,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                         msg="created snapshot",
                     )
                 )
-                return hist_pb2.SnapshotResponse(
-                    payload=serialize_chunked_hist_payload(
-                        snapshot,
-                        codec=self._request_dense_view_codec(request),
-                    )
-                )
+                return hist_pb2.SnapshotResponse(payload=payload)
             except (TypeError, ValueError) as exc:
                 logger.error(
                     fmt_rpc_logger_msg(

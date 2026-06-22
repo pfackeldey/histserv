@@ -256,6 +256,10 @@ class ChunkedHist:
         if not any(spec.known_keys for spec in chunked.chunk_axes):
             return chunked
 
+        # Only the real category positions (0..n-1) are addressed here; the
+        # categorical overflow bin (index -1 when flow=True) is never read.
+        # If the source histogram had overflow fills on an IntCategory/StrCategory
+        # axis, those counts are silently dropped and will not appear in the result.
         for key_indices in itertools.product(
             *(range(len(spec.known_keys)) for spec in chunked.chunk_axes)
         ):
@@ -417,6 +421,9 @@ class ChunkedHist:
             for spec in self.chunk_axes
         ]
 
+        # Each chunk key maps to a real category index (0..n-1); the categorical
+        # overflow bin is never written. Any overflow counts that existed before
+        # a from_hist() call were already dropped at that point.
         for key, chunk_view in self._chunks.items():
             selector: list[tp.Any] = [slice(None)] * merged_view.ndim
             for spec, axis_map, key_part in zip(
