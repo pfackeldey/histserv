@@ -24,13 +24,15 @@ def app_client(histogrammer: Histogrammer) -> TestClient:
     return TestClient(app)
 
 
-def _add_hist(histogrammer: Histogrammer, h: hist.Hist) -> str:
+def _add_hist(
+    histogrammer: Histogrammer, h: hist.Hist, token: str | None = None
+) -> str:
     import uuid
 
     hist_id = uuid.uuid4().hex
     histogrammer._entries[hist_id] = HistogramEntry(
         hist=ChunkedHist.from_hist(h),
-        token=None,
+        token=token,
         last_access=datetime.now(timezone.utc),
         unique_ids=set(),
     )
@@ -197,6 +199,57 @@ class TestWebSocketProtocol:
             ws.send_json({"type": "subscribe", "payload": {"streams": ["stats"]}})
             msg2 = ws.receive_json()
             assert msg2["type"] == "stats"
+
+    def test_token_protected_hist_hidden_without_token(
+        self, app_client: TestClient, histogrammer: Histogrammer
+    ) -> None:
+        h = hist.Hist(hist.axis.Regular(4, 0, 4, name="x"), name="secret_hist")
+        hist_id = _add_hist(histogrammer, h, token="secret")
+
+        with app_client.websocket_connect("/ws") as ws:
+            # hist_list must not leak the token-protected histogram
+            ws.send_json({"type": "subscribe", "payload": {"streams": ["hist_list"]}})
+            list_msg = ws.receive_json()
+            assert list_msg["type"] == "hist_list"
+            assert all(
+                item["hist_id"] != hist_id for item in list_msg["payload"]["items"]
+            )
+
+            # data/meta must be treated as not found
+            ws.send_json(
+                {
+                    "type": "get_hist",
+                    "payload": {"hist_id": hist_id, "selection": {}},
+                }
+            )
+            err = ws.receive_json()
+            assert err["type"] == "error"
+            assert err["payload"]["code"] == "NOT_FOUND"
+
+    def test_token_protected_hist_visible_with_token(
+        self, app_client: TestClient, histogrammer: Histogrammer
+    ) -> None:
+        h = hist.Hist(hist.axis.Regular(4, 0, 4, name="x"), name="secret_hist")
+        hist_id = _add_hist(histogrammer, h, token="secret")
+
+        with app_client.websocket_connect("/ws?token=secret") as ws:
+            ws.send_json({"type": "subscribe", "payload": {"streams": ["hist_list"]}})
+            list_msg = ws.receive_json()
+            assert any(
+                item["hist_id"] == hist_id for item in list_msg["payload"]["items"]
+            )
+
+            ws.send_json(
+                {
+                    "type": "get_hist",
+                    "payload": {"hist_id": hist_id, "selection": {}},
+                }
+            )
+            meta = ws.receive_json()
+            data = ws.receive_json()
+            assert meta["type"] == "hist_meta"
+            assert data["type"] == "hist_data"
+            assert data["payload"]["hist_id"] == hist_id
 
     def test_message_envelope_structure(
         self, app_client: TestClient, histogrammer: Histogrammer

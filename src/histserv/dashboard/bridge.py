@@ -19,7 +19,7 @@ from histserv.dashboard.histogram_json import (
     histogram_summary,
     to_plot_json,
 )
-from histserv.service import Histogrammer
+from histserv.service import HistogramEntry, Histogrammer
 
 # Interval constants (seconds)
 _STATS_INTERVAL = 1.0
@@ -51,10 +51,31 @@ class _ClientState:
     last_hist_push: dict[_HistRequest, float] = field(default_factory=dict)
     # last version (ms timestamp) sent per request, to skip redundant pushes
     last_hist_version: dict[_HistRequest, int] = field(default_factory=dict)
+    # access token for this connection (mirrors the REST ?token= convention);
+    # gates visibility of token-protected histograms
+    token: str | None = None
 
 
 def _envelope(msg_type: str, payload: dict) -> dict:
     return {"type": msg_type, "ts": time.time(), "payload": payload}
+
+
+def _visible_entry(
+    histogrammer: Histogrammer, hist_id: str, token: str | None
+) -> HistogramEntry | None:
+    """Resolve a histogram entry honoring token-based access control.
+
+    Mirrors the gRPC server's ``_get_entry``: a token-protected entry is only
+    visible to a caller presenting the matching token. Returns ``None`` (i.e.
+    "not found") on a missing entry or a token mismatch, so REST and WS callers
+    can't distinguish "doesn't exist" from "no access".
+    """
+    entry = histogrammer._entries.get(hist_id)
+    if entry is None:
+        return None
+    if entry.token is not None and entry.token != token:
+        return None
+    return entry
 
 
 def create_app(
@@ -87,10 +108,8 @@ def create_app(
     async def get_histogram_metadata(
         hist_id: str, token: str | None = None
     ) -> JSONResponse:
-        entry = histogrammer._entries.get(hist_id)
+        entry = _visible_entry(histogrammer, hist_id, token)
         if entry is None:
-            return JSONResponse({"error": "not found"}, status_code=404)
-        if entry.token is not None and entry.token != token:
             return JSONResponse({"error": "not found"}, status_code=404)
         try:
             data = histogram_metadata(hist_id, entry)
@@ -102,16 +121,15 @@ def create_app(
     async def get_histogram(
         hist_id: str, token: str | None = None, selection: str | None = None
     ) -> JSONResponse:
-        entry = histogrammer._entries.get(hist_id)
+        entry = _visible_entry(histogrammer, hist_id, token)
         if entry is None:
-            return JSONResponse({"error": "not found"}, status_code=404)
-        if entry.token is not None and entry.token != token:
             return JSONResponse({"error": "not found"}, status_code=404)
         try:
             hist_request = _make_hist_request(
                 hist_id,
                 _parse_selection_query(selection),
                 histogrammer,
+                token,
             )
             # Copy the chunk synchronously on the loop (atomic vs. gRPC fills),
             # then offload only the .tolist() conversion to a worker thread.
@@ -130,9 +148,9 @@ def create_app(
         return JSONResponse(data)
 
     @app.websocket("/ws")
-    async def ws_endpoint(websocket: WebSocket) -> None:
+    async def ws_endpoint(websocket: WebSocket, token: str | None = None) -> None:
         await websocket.accept()
-        state = _ClientState(websocket=websocket)
+        state = _ClientState(websocket=websocket, token=token)
         _clients.add(state)
         try:
             while True:
@@ -191,8 +209,9 @@ def _make_hist_request(
     hist_id: str,
     raw_selection: object,
     histogrammer: Histogrammer,
+    token: str | None,
 ) -> _HistRequest:
-    entry = histogrammer._entries.get(hist_id)
+    entry = _visible_entry(histogrammer, hist_id, token)
     if entry is None:
         raise KeyError(hist_id)
 
@@ -246,6 +265,7 @@ async def _handle_client_message(
                     hist_id,
                     payload.get("selection"),
                     histogrammer,
+                    state.token,
                 )
             except KeyError:
                 await _send_ws_error(
@@ -305,6 +325,7 @@ async def _handle_client_message(
                     hist_id,
                     payload.get("selection"),
                     histogrammer,
+                    state.token,
                 )
             except KeyError:
                 await _send_ws_error(
@@ -349,7 +370,7 @@ async def _push_to_client(
         if now - last < min_interval:
             continue
 
-        entry = histogrammer._entries.get(hist_request.hist_id)
+        entry = _visible_entry(histogrammer, hist_request.hist_id, state.token)
         if entry is None:
             await _send_ws_error(
                 state,
@@ -391,6 +412,7 @@ async def _send_hist_list(state: _ClientState, histogrammer: Histogrammer) -> No
     items = [
         histogram_summary(hist_id, entry)
         for hist_id, entry in histogrammer._entries.items()
+        if entry.token is None or entry.token == state.token
     ]
     await state.websocket.send_json(_envelope("hist_list", {"items": items}))
 
@@ -398,7 +420,7 @@ async def _send_hist_list(state: _ClientState, histogrammer: Histogrammer) -> No
 async def _send_hist_meta(
     state: _ClientState, hist_id: str, histogrammer: Histogrammer
 ) -> None:
-    entry = histogrammer._entries.get(hist_id)
+    entry = _visible_entry(histogrammer, hist_id, state.token)
     if entry is None:
         await _send_ws_error(
             state,
@@ -414,7 +436,7 @@ async def _send_hist_meta(
 async def _send_hist_data(
     state: _ClientState, hist_request: _HistRequest, histogrammer: Histogrammer
 ) -> None:
-    entry = histogrammer._entries.get(hist_request.hist_id)
+    entry = _visible_entry(histogrammer, hist_request.hist_id, state.token)
     if entry is None:
         await _send_ws_error(
             state,

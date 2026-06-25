@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import resource
+import os
 import time
 import typing as tp
 import uuid
@@ -56,67 +58,48 @@ class LoggingInterceptor(grpc.aio.ServerInterceptor):
 
         async def logging_wrapper(request, context):
             started = time.perf_counter()
-            debug_enabled = logger.isEnabledFor(10)
-            error_enabled = logger.isEnabledFor(40)
+            debug_enabled = logger.isEnabledFor(logging.DEBUG)
+            error_enabled = logger.isEnabledFor(logging.ERROR)
             request_size = request.ByteSize() if (debug_enabled or error_enabled) else 0
+
+            def _log(level: int, msg: str) -> None:
+                hist_id = getattr(request, "hist_id", None)
+                if isinstance(hist_id, str) and hist_id:
+                    logger.log(
+                        level,
+                        fmt_rpc_logger_msg(
+                            rpc_method=rpc_method, hist_id=hist_id, msg=msg
+                        ),
+                    )
+                else:
+                    logger.log(
+                        level,
+                        fmt_rpc_logger_msg_no_hist_id(
+                            rpc_method=rpc_method, msg=msg
+                        ),
+                    )
 
             try:
                 response = await handler.unary_unary(request, context)
             except Exception:
                 if error_enabled:
                     duration = time.perf_counter() - started
-                    hist_id = getattr(request, "hist_id", None)
-                    if isinstance(hist_id, str) and hist_id:
-                        logger.error(
-                            fmt_rpc_logger_msg(
-                                rpc_method=rpc_method,
-                                hist_id=hist_id,
-                                msg=(
-                                    f"request={bytes_repr(request_size)}, "
-                                    f"duration={duration_repr(duration)}, "
-                                    "response=<error>"
-                                ),
-                            )
-                        )
-                    else:
-                        logger.error(
-                            fmt_rpc_logger_msg_no_hist_id(
-                                rpc_method=rpc_method,
-                                msg=(
-                                    f"request={bytes_repr(request_size)}, "
-                                    f"duration={duration_repr(duration)}, "
-                                    "response=<error>"
-                                ),
-                            )
-                        )
+                    _log(
+                        logging.ERROR,
+                        f"request={bytes_repr(request_size)}, "
+                        f"duration={duration_repr(duration)}, "
+                        "response=<error>",
+                    )
                 raise
 
             if debug_enabled:
                 duration = time.perf_counter() - started
-                hist_id = getattr(request, "hist_id", None)
-                if isinstance(hist_id, str) and hist_id:
-                    logger.debug(
-                        fmt_rpc_logger_msg(
-                            rpc_method=rpc_method,
-                            hist_id=hist_id,
-                            msg=(
-                                f"request={bytes_repr(request_size)}, "
-                                f"response={bytes_repr(response.ByteSize())}, "
-                                f"duration={duration_repr(duration)}"
-                            ),
-                        )
-                    )
-                else:
-                    logger.debug(
-                        fmt_rpc_logger_msg_no_hist_id(
-                            rpc_method=rpc_method,
-                            msg=(
-                                f"request={bytes_repr(request_size)}, "
-                                f"response={bytes_repr(response.ByteSize())}, "
-                                f"duration={duration_repr(duration)}"
-                            ),
-                        )
-                    )
+                _log(
+                    logging.DEBUG,
+                    f"request={bytes_repr(request_size)}, "
+                    f"response={bytes_repr(response.ByteSize())}, "
+                    f"duration={duration_repr(duration)}",
+                )
             return response
 
         return grpc.unary_unary_rpc_method_handler(
@@ -286,7 +269,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 },
             )
 
-        usage = resource.getrusage(resource.RUSAGE_SELF)
+        times = os.times()
         observed_at = datetime.now(timezone.utc)
         return StatsSnapshot(
             histogram_count=len(entries),
@@ -294,8 +277,8 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
             active_rpcs=self._active_rpcs,
             version=__version__,
             uptime_seconds=int((observed_at - self._started_at).total_seconds()),
-            user_cpu_seconds=usage.ru_utime,
-            system_cpu_seconds=usage.ru_stime,
+            user_cpu_seconds=times.user,
+            system_cpu_seconds=times.system,
             rpc_calls_total=dict(self._rpc_calls_total),
             observed_at=observed_at,
             token_scoped=token_scoped,
@@ -573,6 +556,8 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                     snapshot,
                     codec=self._request_dense_view_codec(request),
                 )
+                if request.delete_from_server:
+                    self._entries.pop(hist_id, None)
                 logger.debug(
                     fmt_rpc_logger_msg(
                         rpc_method=RPC_SNAPSHOT,
