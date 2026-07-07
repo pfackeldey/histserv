@@ -250,7 +250,7 @@ class ChunkedHist:
         )
         source_view = source.view(flow=True)
         if not chunked.chunk_axes:
-            chunked._save_chunk_view((), np.ascontiguousarray(source_view))
+            chunked._save_chunk_view((), source_view)
             return chunked
 
         if not any(spec.known_keys for spec in chunked.chunk_axes):
@@ -270,7 +270,7 @@ class ChunkedHist:
                 key_values.append(spec.known_keys[key_index])
             chunked._save_chunk_view(
                 tuple(key_values),
-                np.ascontiguousarray(source_view[tuple(selector)]),
+                source_view[tuple(selector)],
             )
 
         return chunked
@@ -293,13 +293,14 @@ class ChunkedHist:
 
     def _save_chunk_view(self, key: ChunkKey, chunk_view: np.ndarray) -> None:
         array = _validate_dense_view(
-            np.ascontiguousarray(chunk_view),
+            chunk_view,
             shape=self.dense_view_shape,
             dtype=self.dense_view_dtype,
         )
-        if not array.flags.writeable:
-            array = array.copy()
-        self._chunks[key] = array
+        # Stored chunks must own their memory: callers may pass views into
+        # other histograms' storage (from_hist, __iadd__) or reused scratch
+        # buffers, and later fills mutate stored chunks in place.
+        self._chunks[key] = np.array(array, order="C")
 
     def _remember_chunk_key(self, key: ChunkKey) -> None:
         for spec, key_part in zip(self.chunk_axes, key, strict=True):
@@ -365,7 +366,7 @@ class ChunkedHist:
             dense_hist.fill(**dense_kwargs)
             existing = self._chunks.get(chunk_key)
             if existing is None:
-                self._save_chunk_view(chunk_key, dense_view.copy(order="C"))
+                self._save_chunk_view(chunk_key, dense_view)
                 self._remember_chunk_key(chunk_key)
             else:
                 existing[...] = dense_view
@@ -592,7 +593,7 @@ class ChunkedHist:
         for result_spec in result.chunk_axes:
             result_spec.known_keys = keys_by_axis[result_spec.name]
         for key in matching_keys:
-            result._save_chunk_view(key, self._chunks[key].copy(order="C"))
+            result._save_chunk_view(key, self._chunks[key])
         return result
 
     def copy(self) -> ChunkedHist:
