@@ -580,3 +580,25 @@ def test_flush_without_h5py_reports_missing_extra(
 
     # The histogram is untouched by the failed flush.
     assert remote_hist.exists()
+
+
+def test_token_rpc_counters_dropped_with_last_histogram(
+    client: Client, grpc_server
+) -> None:
+    first = client.init(regular_hist(), token="alice")
+    second = client.init(regular_hist(), token="alice")
+    first.fill(x=np.array([0.5], dtype=np.float32))
+
+    def alice_counters() -> list[tuple[str, str]]:
+        histogrammer = grpc_server._server.histogrammer
+        return [key for key in histogrammer._rpc_calls_by_token if key[0] == "alice"]
+
+    assert alice_counters()
+
+    # Counters survive while the token still owns a histogram ...
+    first.delete()
+    assert alice_counters()
+
+    # ... and are dropped with its last histogram.
+    second.delete()
+    assert not alice_counters()
