@@ -602,3 +602,45 @@ def test_token_rpc_counters_dropped_with_last_histogram(
     # ... and are dropped with its last histogram.
     second.delete()
     assert not alice_counters()
+
+
+def test_fill_many_sends_one_chunk_per_distinct_key(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def make_hist() -> Hist:
+        return Hist(
+            hist.axis.Regular(8, 0, 1, name="x"),
+            hist.axis.StrCategory([], growth=True, name="cat"),
+        )
+
+    local_hist = make_hist()
+    remote_hist = client.init(make_hist(), token="alice")
+
+    stub = remote_hist.client.stub
+    captured: list[hist_pb2.FillManyRequest] = []
+    original_fill_many = stub.FillMany
+
+    def spy(request: hist_pb2.FillManyRequest, **kwargs: object):
+        captured.append(request)
+        return original_fill_many(request, **kwargs)
+
+    monkeypatch.setattr(stub, "FillMany", spy)
+
+    fill_calls = [
+        {"x": [0.1], "cat": "a"},
+        {"x": [0.2], "cat": "b"},
+        {"x": [0.3], "cat": "a"},
+        {"x": [0.4], "cat": "a"},
+    ]
+    for fill_kwargs in fill_calls:
+        local_hist.fill(**fill_kwargs)
+    remote_hist.fill_many(fill_calls)
+
+    # Four fills over two distinct chunk keys -> two dense payloads.
+    assert len(captured) == 1
+    assert len(captured[0].chunks) == 2
+
+    remote_snapshot = remote_hist.snapshot()
+    np.testing.assert_equal(
+        remote_snapshot.to_hist().view(flow=True), local_hist.view(flow=True)
+    )
