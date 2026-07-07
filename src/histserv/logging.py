@@ -36,5 +36,7 @@ def configure_logging(level: int = logging.INFO) -> None:
 
 
 def get_logger(name: str) -> logging.Logger:
-    configure_logging()
+    # Intentionally does NOT call configure_logging(): merely importing the
+    # library must never touch the host application's root logger. Handlers
+    # are only installed when the histserv CLI entry point opts in.
     return logging.getLogger(name)
