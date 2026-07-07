@@ -19,7 +19,7 @@ async def main() -> None:
         "--port",
         default=0,
         type=int,
-        help="TCP port to bind the gRPC server to.",
+        help="TCP port to bind the gRPC server to (0 picks a free port).",
     )
     ap.add_argument(
         "--prune-after-seconds",
@@ -72,7 +72,7 @@ async def main() -> None:
         "server (listening at %s) started with port=%s, "
         "prune_after=%s, prune_interval=%s, stats_interval=%s%s",
         server.address,
-        options.port,
+        server.port,
         timedelta_repr(options.prune_after),
         timedelta_repr(options.prune_interval),
         timedelta_repr(options.stats_interval),
