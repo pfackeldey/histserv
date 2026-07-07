@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-import resource
 import os
 import time
 import typing as tp
@@ -525,8 +525,14 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                         "delete_from_server is not allowed for partial snapshots",
                     )
 
+                # Capture an atomic copy of the chunk state synchronously on
+                # the event loop (gRPC fills cannot interleave with synchronous
+                # code here), so the heavy serialization below can run in a
+                # worker thread without racing concurrent mutations. The entry
+                # is only removed after serialization succeeds, so a failed
+                # snapshot never loses data.
                 if request.delete_from_server:
-                    snapshot = entry.hist
+                    snapshot = entry.hist.copy()
                 elif request.chunk_selectors:
                     selection: dict[str, list[str | int]] = {}
                     for selector in request.chunk_selectors:
@@ -540,11 +546,14 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                                 f"chunk selector for axis {selector.axis!r} must be non-empty"
                             )
                         selection[selector.axis] = values
+                    # __getitem__ already returns a fresh ChunkedHist with
+                    # copied chunk arrays, so it is detached from live storage.
                     snapshot = entry.hist[selection]
                 else:
-                    snapshot = entry.hist
+                    snapshot = entry.hist.copy()
 
-                payload = serialize_chunked_hist_payload(
+                payload = await asyncio.to_thread(
+                    serialize_chunked_hist_payload,
                     snapshot,
                     codec=self._request_dense_view_codec(request),
                 )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 
 import boost_histogram as bh
 import hist
@@ -66,6 +67,63 @@ def histogram_metadata(hist_id: str, entry: HistogramEntry) -> dict:
     }
 
 
+@dataclass(slots=True)
+class _PlotJsonInputs:
+    """Atomic snapshot captured on the event loop, safe to hand to a worker.
+
+    `chunk_view` is an independent copy of the live chunk array, so the
+    `.tolist()` conversion can run off-loop without racing concurrent gRPC
+    mutations of the original.
+    """
+
+    hist_id: str
+    exact_selection: dict[str, ChunkScalar]
+    chunk_view: np.ndarray
+    version: int
+
+
+def capture_plot_json_inputs(
+    hist_id: str,
+    entry: HistogramEntry,
+    *,
+    selection: Mapping[str, ChunkScalar | Iterable[ChunkScalar]],
+) -> _PlotJsonInputs:
+    """Atomically copy the data needed to render one chunk to JSON.
+
+    Must run synchronously on the event-loop thread (relative to mutating gRPC
+    handlers) so the chunk lookup and copy cannot interleave with a fill. The
+    returned snapshot owns its array and is safe to pass to `to_plot_json` in a
+    worker thread.
+
+    `selection` must identify exactly one chunk. For histograms without chunk
+    axes this is the empty mapping.
+    """
+    chunk_key = entry.hist.exact_chunk_key(selection)
+    exact_selection = entry.hist.selection_dict(chunk_key)
+    chunk_view = entry.hist.chunk_view_copy(exact_selection)
+    return _PlotJsonInputs(
+        hist_id=hist_id,
+        exact_selection=exact_selection,
+        chunk_view=chunk_view,
+        # ms-precision timestamp; changes whenever fills update last_access
+        version=int(entry.last_access.timestamp() * 1000),
+    )
+
+
+def to_plot_json(inputs: _PlotJsonInputs) -> dict:
+    """Convert a captured snapshot to a JSON-serializable dict.
+
+    Touches only the owned copy in `inputs`, so it is safe to run in a worker
+    thread (the expensive `.tolist()` happens here).
+    """
+    return {
+        "hist_id": inputs.hist_id,
+        "selection": inputs.exact_selection,
+        "values": _chunk_values(inputs.chunk_view),
+        "version": inputs.version,
+    }
+
+
 def histogram_to_plot_json(
     hist_id: str,
     entry: HistogramEntry,
@@ -74,22 +132,13 @@ def histogram_to_plot_json(
 ) -> dict:
     """Materialize one selected dense chunk into a JSON-serializable dict.
 
+    Convenience wrapper that captures and converts in one synchronous call.
     `selection` must identify exactly one chunk. For histograms without chunk
     axes this is the empty mapping.
     """
-    chunk_key = entry.hist.exact_chunk_key(selection)
-    exact_selection = entry.hist.selection_dict(chunk_key)
-    chunk_view = entry.hist.chunk_view(exact_selection)
-
-    result: dict = {
-        "hist_id": hist_id,
-        "selection": exact_selection,
-        "values": _chunk_values(chunk_view),
-        # ms-precision timestamp; changes whenever fills update last_access
-        "version": int(entry.last_access.timestamp() * 1000),
-    }
-
-    return result
+    return to_plot_json(
+        capture_plot_json_inputs(hist_id, entry, selection=selection)
+    )
 
 
 def histogram_summary(hist_id: str, entry: HistogramEntry) -> dict:

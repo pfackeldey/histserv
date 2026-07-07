@@ -595,6 +595,34 @@ class ChunkedHist:
             result._save_chunk_view(key, self._chunks[key].copy(order="C"))
         return result
 
+    def copy(self) -> ChunkedHist:
+        """Return a deep copy with independent chunk arrays.
+
+        Copies the `_chunks` dict and each chunk's known keys so the result is
+        safe to hand to a worker thread while the original keeps being mutated
+        on the event loop. Must be called synchronously where no concurrent
+        mutation can interleave (e.g. a gRPC handler on the event-loop thread).
+        """
+        result = self.empty_like()
+        for spec, source_spec in zip(result.chunk_axes, self.chunk_axes, strict=True):
+            spec.known_keys = list(source_spec.known_keys)
+        result._chunks = {
+            key: chunk_view.copy(order="C") for key, chunk_view in self._chunks.items()
+        }
+        return result
+
+    def chunk_view_copy(
+        self,
+        selection: Mapping[str, ChunkScalar | tp.Iterable[ChunkScalar]],
+    ) -> np.ndarray:
+        """Return an independent copy of one chunk's dense view.
+
+        Like `chunk_view`, but the returned array never aliases the live chunk
+        storage, so it is safe to read from another thread. Must be called
+        synchronously relative to mutating gRPC handlers.
+        """
+        return self.chunk_view(selection).copy(order="C")
+
     def histogram_bytes(self) -> int:
         return sum(chunk.nbytes for chunk in self._chunks.values())
 
