@@ -546,3 +546,37 @@ def test_remote_slice_snapshot_returns_only_selected_chunks(client: Client) -> N
 
     assert list(sliced.axes["cat"]) == [1]
     np.testing.assert_equal(sliced.sum(flow=True).value, 2.0)
+
+
+def test_flush_writes_hdf5_file_and_removes_hist(
+    client: Client, tmp_path
+) -> None:
+    h5py = pytest.importorskip("h5py")
+    remote_hist = client.init(regular_hist(), token="alice")
+    remote_hist.fill(x=np.array([0.5, 1.5], dtype=np.float32))
+
+    destination = tmp_path / "flushed.h5"
+    remote_hist.flush(str(destination))
+
+    assert not remote_hist.exists()
+    with h5py.File(destination) as h5_file:
+        assert remote_hist.hist_id in h5_file
+
+
+def test_flush_without_h5py_reports_missing_extra(
+    client: Client, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    remote_hist = client.init(regular_hist(), token="alice")
+
+    # Simulate a server installed without the optional hdf5 extra.
+    import sys
+
+    monkeypatch.setitem(sys.modules, "h5py", None)
+    with pytest.raises(
+        grpc.RpcError, match=r"FAILED_PRECONDITION.*histserv\[hdf5\]"
+    ):
+        remote_hist.flush(str(tmp_path / "flushed.h5"))
+    monkeypatch.undo()
+
+    # The histogram is untouched by the failed flush.
+    assert remote_hist.exists()

@@ -54,6 +54,9 @@ Homepage = "https://github.com/pfackeldey/histserv"
 Discussions = "https://github.com/pfackeldey/histserv/discussions"
 
 [project.optional-dependencies]
+hdf5 = [
+    "h5py>=3.0",  # needed for the `.flush` RPC on the server
+]
 dashboard = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",

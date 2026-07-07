@@ -649,8 +649,16 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
         request_token = self._request_token(context)
         self._rpc_started(RPC_FLUSH, request_token)
         try:
-            import h5py
-            import uhi.io.hdf5
+            try:
+                import h5py
+                import uhi.io.hdf5
+            except ImportError:
+                await self._abort(
+                    context,
+                    grpc.StatusCode.FAILED_PRECONDITION,
+                    "Flush requires h5py on the server; "
+                    "install the optional extra 'histserv[hdf5]'",
+                )
 
             hist_id = request.hist_id
             destination = request.destination
