@@ -675,8 +675,19 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 hist_id=hist_id,
                 request_token=request_token,
             )
-            with h5py.File(destination, "w") as h5_file:
-                uhi.io.hdf5.write(h5_file.create_group(hist_id), entry.hist.to_hist())
+            # Capture an atomic copy on the event loop (same pattern as
+            # Snapshot), then materialize and write the file in a worker
+            # thread so the blocking I/O does not stall other RPCs. The
+            # entry is removed only after the write succeeds.
+            snapshot = entry.hist.copy()
+
+            def _write_hdf5() -> None:
+                with h5py.File(destination, "w") as h5_file:
+                    uhi.io.hdf5.write(
+                        h5_file.create_group(hist_id), snapshot.to_hist()
+                    )
+
+            await asyncio.to_thread(_write_hdf5)
             self._entries.pop(hist_id, None)
             logger.debug(
                 fmt_rpc_logger_msg(
