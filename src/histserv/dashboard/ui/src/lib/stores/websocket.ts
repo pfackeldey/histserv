@@ -16,6 +16,16 @@ const _handlers = new Map<string, Set<MessageHandler>>()
 let _ws: WebSocket | null = null
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
+// Handlers run on every (re)connect so stores can re-establish server-side
+// subscription state, which is lost when the connection drops.
+type OpenHandler = () => void
+const _openHandlers = new Set<OpenHandler>()
+
+export function onOpen(handler: OpenHandler): () => void {
+  _openHandlers.add(handler)
+  return () => _openHandlers.delete(handler)
+}
+
 function _connect() {
   wsStatus.set('connecting')
   _ws = new WebSocket(WS_URL)
@@ -24,6 +34,7 @@ function _connect() {
     wsStatus.set('open')
     // Re-subscribe to stats stream on reconnect
     send({ type: 'subscribe', payload: { streams: ['stats'] } })
+    for (const handler of _openHandlers) handler()
   }
 
   _ws.onmessage = (event: MessageEvent) => {

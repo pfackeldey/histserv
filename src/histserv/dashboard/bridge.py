@@ -31,6 +31,10 @@ _PUSH_LOOP_INTERVAL = 0.25  # how often the push loop wakes up
 class _HistRequest:
     hist_id: str
     selection_items: tuple[tuple[str, ChunkScalar], ...] = ()
+    # Access token this subscription was made with. Kept per request (not per
+    # connection) so one WS connection can watch histograms with different
+    # tokens; falls back to the connection's ?token= when the message has none.
+    token: str | None = None
 
     @property
     def selection(self) -> dict[str, ChunkScalar]:
@@ -222,7 +226,16 @@ def _make_hist_request(
             (axis_name, exact_key[index])
             for index, axis_name in enumerate(entry.hist.chunk_axis_names)
         ),
+        token=token,
     )
+
+
+def _effective_token(state: _ClientState, payload: dict) -> str | None:
+    """Per-message token if provided, else the connection-level ?token=."""
+    token = payload.get("token")
+    if isinstance(token, str) and token:
+        return token
+    return state.token
 
 
 async def _send_ws_error(state: _ClientState, *, message: str, code: str) -> None:
@@ -260,12 +273,13 @@ async def _handle_client_message(
     elif msg_type == "subscribe_hist":
         hist_id = payload.get("hist_id")
         if hist_id:
+            request_token = _effective_token(state, payload)
             try:
                 hist_request = _make_hist_request(
                     hist_id,
                     payload.get("selection"),
                     histogrammer,
-                    state.token,
+                    request_token,
                 )
             except KeyError:
                 await _send_ws_error(
@@ -291,7 +305,7 @@ async def _handle_client_message(
                 )
                 return
             state.hist_subscriptions[hist_request] = max(0.1, rate_hz)
-            await _send_hist_meta(state, hist_id, histogrammer)
+            await _send_hist_meta(state, hist_id, histogrammer, token=request_token)
             await _send_hist_data(state, hist_request, histogrammer)
             state.last_hist_push[hist_request] = time.time()
 
@@ -320,12 +334,13 @@ async def _handle_client_message(
     elif msg_type == "get_hist":
         hist_id = payload.get("hist_id")
         if hist_id:
+            request_token = _effective_token(state, payload)
             try:
                 hist_request = _make_hist_request(
                     hist_id,
                     payload.get("selection"),
                     histogrammer,
-                    state.token,
+                    request_token,
                 )
             except KeyError:
                 await _send_ws_error(
@@ -341,7 +356,7 @@ async def _handle_client_message(
                     code="INVALID_SELECTION",
                 )
                 return
-            await _send_hist_meta(state, hist_id, histogrammer)
+            await _send_hist_meta(state, hist_id, histogrammer, token=request_token)
             await _send_hist_data(state, hist_request, histogrammer)
 
 
@@ -370,7 +385,7 @@ async def _push_to_client(
         if now - last < min_interval:
             continue
 
-        entry = _visible_entry(histogrammer, hist_request.hist_id, state.token)
+        entry = _visible_entry(histogrammer, hist_request.hist_id, hist_request.token)
         if entry is None:
             await _send_ws_error(
                 state,
@@ -418,9 +433,13 @@ async def _send_hist_list(state: _ClientState, histogrammer: Histogrammer) -> No
 
 
 async def _send_hist_meta(
-    state: _ClientState, hist_id: str, histogrammer: Histogrammer
+    state: _ClientState,
+    hist_id: str,
+    histogrammer: Histogrammer,
+    *,
+    token: str | None,
 ) -> None:
-    entry = _visible_entry(histogrammer, hist_id, state.token)
+    entry = _visible_entry(histogrammer, hist_id, token)
     if entry is None:
         await _send_ws_error(
             state,
@@ -436,7 +455,7 @@ async def _send_hist_meta(
 async def _send_hist_data(
     state: _ClientState, hist_request: _HistRequest, histogrammer: Histogrammer
 ) -> None:
-    entry = _visible_entry(histogrammer, hist_request.hist_id, state.token)
+    entry = _visible_entry(histogrammer, hist_request.hist_id, hist_request.token)
     if entry is None:
         await _send_ws_error(
             state,
