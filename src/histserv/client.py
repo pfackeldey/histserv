@@ -96,7 +96,10 @@ class Client:
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         del exc_type, exc_value, traceback
-        self.channel.close()
+        # Only close a channel that was actually created; accessing the
+        # cached_property here would open one just to close it.
+        if "channel" in self.__dict__:
+            self.channel.close()
 
     @cached_property
     def channel(self) -> grpc.Channel:
