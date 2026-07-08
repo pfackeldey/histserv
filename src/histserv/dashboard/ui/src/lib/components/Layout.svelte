@@ -10,6 +10,7 @@
   interface SliceView {
     id: string
     hist_id: string
+    token: string | null
     selection: Record<string, string | number>
     meta: HistMetaPayload
   }
@@ -24,11 +25,11 @@
       meta: HistMetaPayload
     }>,
   ) {
-    const { hist_id, selection, meta } = event.detail
+    const { hist_id, token, selection, meta } = event.detail
     // Use hist_id + serialized selection as a unique key so the same slice isn't duplicated
     const id = `${hist_id}:${JSON.stringify(selection)}`
     if (views.some((v) => v.id === id)) return
-    views = [...views, { id, hist_id, selection, meta }]
+    views = [...views, { id, hist_id, token, selection, meta }]
   }
 
   function removeView(id: string) {
@@ -57,6 +58,7 @@
         {#each views as view (view.id)}
           <HistogramView
             hist_id={view.hist_id}
+            token={view.token}
             selection={view.selection}
             meta={view.meta}
             on:close={() => removeView(view.id)}

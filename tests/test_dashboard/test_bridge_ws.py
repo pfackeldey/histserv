@@ -251,6 +251,63 @@ class TestWebSocketProtocol:
             assert data["type"] == "hist_data"
             assert data["payload"]["hist_id"] == hist_id
 
+    def test_per_message_token_grants_access_on_tokenless_connection(
+        self, app_client: TestClient, histogrammer: Histogrammer
+    ) -> None:
+        h = hist.Hist(hist.axis.Regular(4, 0, 4, name="x"), name="secret_hist")
+        hist_id = _add_hist(histogrammer, h, token="secret")
+
+        with app_client.websocket_connect("/ws") as ws:
+            # Without any token the histogram must stay hidden.
+            ws.send_json(
+                {
+                    "type": "subscribe_hist",
+                    "payload": {"hist_id": hist_id, "selection": {}},
+                }
+            )
+            err = ws.receive_json()
+            assert err["type"] == "error"
+            assert err["payload"]["code"] == "NOT_FOUND"
+
+            # The same connection can subscribe by supplying the token
+            # in the message itself.
+            ws.send_json(
+                {
+                    "type": "subscribe_hist",
+                    "payload": {
+                        "hist_id": hist_id,
+                        "selection": {},
+                        "token": "secret",
+                    },
+                }
+            )
+            meta = ws.receive_json()
+            data = ws.receive_json()
+            assert meta["type"] == "hist_meta"
+            assert data["type"] == "hist_data"
+            assert data["payload"]["hist_id"] == hist_id
+
+    def test_per_message_token_must_match(
+        self, app_client: TestClient, histogrammer: Histogrammer
+    ) -> None:
+        h = hist.Hist(hist.axis.Regular(4, 0, 4, name="x"), name="secret_hist")
+        hist_id = _add_hist(histogrammer, h, token="secret")
+
+        with app_client.websocket_connect("/ws") as ws:
+            ws.send_json(
+                {
+                    "type": "get_hist",
+                    "payload": {
+                        "hist_id": hist_id,
+                        "selection": {},
+                        "token": "wrong",
+                    },
+                }
+            )
+            err = ws.receive_json()
+            assert err["type"] == "error"
+            assert err["payload"]["code"] == "NOT_FOUND"
+
     def test_message_envelope_structure(
         self, app_client: TestClient, histogrammer: Histogrammer
     ) -> None:

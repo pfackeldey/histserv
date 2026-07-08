@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte'
-  import { histogramData, subscribeHist, unsubscribeHist } from '../stores/histogramData'
+  import { histKey, histogramData, subscribeHist, unsubscribeHist } from '../stores/histogramData'
   import { renderHistogram } from '../d3-histogram'
   import type { HistMetaPayload } from '../types/protocol'
 
   export let hist_id: string
   export let selection: Record<string, string | number>
   export let meta: HistMetaPayload
+  export let token: string | null = null
 
   const dispatch = createEventDispatcher<{ close: void }>()
 
@@ -14,14 +15,14 @@
   let lastVersion: number | null = null
 
   onMount(() => {
-    subscribeHist(hist_id, selection)
+    subscribeHist(hist_id, selection, token)
   })
 
   onDestroy(() => {
     unsubscribeHist(hist_id, selection)
   })
 
-  $: data = $histogramData.get(hist_id) ?? null
+  $: data = $histogramData.get(histKey(hist_id, selection)) ?? null
 
   // Re-render only when version changes (new data arrived)
   $: if (container && data && data.version !== lastVersion) {

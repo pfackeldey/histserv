@@ -122,7 +122,13 @@ export type ServerMessage =
 
 export interface SubscribeHistMsg {
   type: 'subscribe_hist'
-  payload: { hist_id: string; selection: Record<string, string | number>; rate_limit_hz?: number }
+  payload: {
+    hist_id: string
+    selection: Record<string, string | number>
+    rate_limit_hz?: number
+    // Per-subscription access token for token-protected histograms
+    token?: string
+  }
 }
 
 export interface UnsubscribeHistMsg {
@@ -132,7 +138,7 @@ export interface UnsubscribeHistMsg {
 
 export interface GetHistMsg {
   type: 'get_hist'
-  payload: { hist_id: string; selection: Record<string, string | number> }
+  payload: { hist_id: string; selection: Record<string, string | number>; token?: string }
 }
 
 // Used internally by the websocket store on connect — not exposed in UI

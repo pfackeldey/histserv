@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render } from '@testing-library/svelte'
-import { histogramData } from '../lib/stores/histogramData'
+import { histKey, histogramData } from '../lib/stores/histogramData'
 import { histogramMeta } from '../lib/stores/histogramMeta'
 import type { HistDataPayload, HistMetaPayload } from '../lib/types/protocol'
 
@@ -9,6 +9,7 @@ vi.mock('../lib/stores/websocket', () => ({
   wsStatus: { subscribe: vi.fn(() => () => {}) },
   send: vi.fn(),
   onMessage: vi.fn(() => () => {}),
+  onOpen: vi.fn(() => () => {}),
 }))
 
 // Import component after mocking
@@ -59,7 +60,7 @@ describe('HistogramView', () => {
   })
 
   it('renders histogram name when data available', () => {
-    histogramData.set(new Map([['test123', mockData]]))
+    histogramData.set(new Map([[histKey('test123', {}), mockData]]))
     histogramMeta.set(new Map([['test123', mockMeta]]))
     const { getByText } = render(HistogramView, {
       props: { hist_id: 'test123', selection: {}, meta: mockMeta },
@@ -68,7 +69,7 @@ describe('HistogramView', () => {
   })
 
   it('renders histogram label', () => {
-    histogramData.set(new Map([['test123', mockData]]))
+    histogramData.set(new Map([[histKey('test123', {}), mockData]]))
     histogramMeta.set(new Map([['test123', mockMeta]]))
     const { getByText } = render(HistogramView, {
       props: { hist_id: 'test123', selection: {}, meta: mockMeta },
@@ -77,7 +78,7 @@ describe('HistogramView', () => {
   })
 
   it('renders dimension description', () => {
-    histogramData.set(new Map([['test123', mockData]]))
+    histogramData.set(new Map([[histKey('test123', {}), mockData]]))
     histogramMeta.set(new Map([['test123', mockMeta]]))
     const { getByText } = render(HistogramView, {
       props: { hist_id: 'test123', selection: {}, meta: mockMeta },
@@ -87,7 +88,7 @@ describe('HistogramView', () => {
   })
 
   it('renders svg chart element when data available', () => {
-    histogramData.set(new Map([['test123', mockData]]))
+    histogramData.set(new Map([[histKey('test123', {}), mockData]]))
     histogramMeta.set(new Map([['test123', mockMeta]]))
     const { container } = render(HistogramView, {
       props: { hist_id: 'test123', selection: {}, meta: mockMeta },
