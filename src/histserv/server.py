@@ -62,11 +62,21 @@ class Server:
 
         self._callbacks: list[asyncio.Task[None]] = []
 
-        self.server.add_insecure_port(self.address)
+        # add_insecure_port returns the actually bound port, which differs
+        # from options.port when it is 0 ("pick any free port").
+        self._port = self.server.add_insecure_port(f"[::]:{self.options.port}")
+        if self._port == 0:
+            raise RuntimeError(
+                f"failed to bind gRPC server to port {self.options.port}"
+            )
+
+    @property
+    def port(self) -> int:
+        return self._port
 
     @property
     def address(self) -> str:
-        return f"[::]:{self.options.port}"
+        return f"[::]:{self._port}"
 
     async def start(self) -> None:
         if self._started:

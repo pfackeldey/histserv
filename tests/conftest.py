@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import socket
 import threading
 from collections.abc import Iterator
 
@@ -12,7 +11,7 @@ from histserv.server import Server, ServerOptions
 
 
 class GrpcServerThread:
-    def __init__(self, port: int) -> None:
+    def __init__(self, port: int = 0) -> None:
         self.port = port
         self._loop: asyncio.AbstractEventLoop | None = None
         self._server: Server | None = None
@@ -60,6 +59,8 @@ class GrpcServerThread:
 
     async def _start_server(self) -> None:
         self._server = Server(options=ServerOptions(port=self.port))
+        # With port=0 the OS picks a free port; expose the bound one.
+        self.port = self._server.port
         await self._server.start()
 
     async def _stop_server(self) -> None:
@@ -71,11 +72,9 @@ class GrpcServerThread:
 
 @pytest.fixture
 def grpc_server() -> Iterator[GrpcServerThread]:
-    with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as sock:
-        sock.bind(("::1", 0))
-        port = sock.getsockname()[1]
-
-    server = GrpcServerThread(port=port)
+    # port=0 lets the server bind any free port, avoiding the race of
+    # probing for a free port first and binding it later.
+    server = GrpcServerThread()
     server.start()
     yield server
     server.stop()
