@@ -267,3 +267,68 @@ def test_chunked_hist_rejects_array_values_for_categorical_axes(
         match=rf"categorical chunk axis '{axis_name}' only accepts scalar int/str values",
     ):
         chunked.fill(**invalid_fill)
+
+
+def _str_categorical_chunked() -> ChunkedHist:
+    return ChunkedHist(
+        hist.axis.Regular(4, 0, 1, name="x"),
+        hist.axis.StrCategory([], growth=True, name="cat"),
+    )
+
+
+def test_chunked_hist_add_does_not_mutate_operands() -> None:
+    left = _str_categorical_chunked()
+    right = left.empty_like()
+    left.fill(x=[0.2], cat="a")
+    right.fill(x=[0.4], cat="a")
+
+    left_before = left.chunk_view({"cat": "a"}).copy()
+    right_before = right.chunk_view({"cat": "a"}).copy()
+
+    merged = left + right
+
+    np.testing.assert_array_equal(left.chunk_view({"cat": "a"}), left_before)
+    np.testing.assert_array_equal(right.chunk_view({"cat": "a"}), right_before)
+    np.testing.assert_array_equal(
+        merged.chunk_view({"cat": "a"}), left_before + right_before
+    )
+    assert not np.shares_memory(
+        merged.chunk_view({"cat": "a"}), left.chunk_view({"cat": "a"})
+    )
+    assert not np.shares_memory(
+        merged.chunk_view({"cat": "a"}), right.chunk_view({"cat": "a"})
+    )
+
+
+def test_chunked_hist_iadd_copies_chunks_from_other() -> None:
+    accumulator = _str_categorical_chunked()
+    other = accumulator.empty_like()
+    other.fill(x=[0.4], cat="b")
+    other_before = other.chunk_view({"cat": "b"}).copy()
+
+    accumulator += other
+    assert not np.shares_memory(
+        accumulator.chunk_view({"cat": "b"}), other.chunk_view({"cat": "b"})
+    )
+
+    # Filling the accumulator afterwards must not touch `other`.
+    accumulator.fill(x=[0.6], cat="b")
+    np.testing.assert_array_equal(other.chunk_view({"cat": "b"}), other_before)
+
+
+def test_chunked_hist_from_hist_does_not_alias_source_storage() -> None:
+    source = hist.Hist(
+        hist.axis.StrCategory(["a"], growth=True, name="cat"),
+        hist.axis.Regular(4, 0, 1, name="x"),
+    )
+    source.fill(cat=["a"], x=[0.2])
+    source_before = source.view(flow=True).copy()
+
+    chunked = ChunkedHist.from_hist(source)
+    assert not np.shares_memory(
+        chunked.chunk_view({"cat": "a"}), source.view(flow=True)
+    )
+
+    # Filling the chunked copy afterwards must not touch the source hist.
+    chunked.fill(cat="a", x=[0.6])
+    np.testing.assert_array_equal(source.view(flow=True), source_before)
