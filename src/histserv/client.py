@@ -11,6 +11,7 @@ import grpc
 from hist import Hist
 
 from histserv.chunked_hist import (
+    ChunkKey,
     ChunkScalar,
     ChunkedHist,
     _zero_dense_view,
@@ -454,11 +455,19 @@ class RemoteHist:
             ):
                 raise ValueError("all fills in fill_many must use compatible axes")
 
+            # Accumulate fills per distinct chunk key before serializing, so
+            # N fills of the same chunk cost one dense payload instead of N
+            # (the server merges them anyway).
+            grouped: dict[ChunkKey, list[dict[str, tp.Any]]] = {}
+            for chunk_key, dense_kwargs in split_fills:
+                grouped.setdefault(chunk_key, []).append(dense_kwargs)
+
             dense_hist = self._make_dense_hist()
             dense_view = dense_hist.view(flow=True)
-            for chunk_key, dense_kwargs in split_fills:
+            for chunk_key, dense_kwargs_list in grouped.items():
                 try:
-                    dense_hist.fill(**dense_kwargs)
+                    for dense_kwargs in dense_kwargs_list:
+                        dense_hist.fill(**dense_kwargs)
                     chunks.append(
                         serialize_chunk_payload(
                             chunk_key,

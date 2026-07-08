@@ -286,11 +286,25 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
     def entries_snapshot(self) -> tuple[HistogramEntry, ...]:
         return tuple(self._entries.values())
 
+    def _remove_entry(self, hist_id: str) -> None:
+        """Remove a histogram and, if its token is no longer used by any
+        entry, the token's RPC counters — otherwise the per-token Counter
+        grows without bound on a long-lived server. A token with no
+        histograms is unreachable through Stats anyway (NOT_FOUND)."""
+        entry = self._entries.pop(hist_id, None)
+        if entry is None or entry.token is None:
+            return
+        token = entry.token
+        if any(e.token == token for e in self._entries.values()):
+            return
+        for key in [k for k in self._rpc_calls_by_token if k[0] == token]:
+            del self._rpc_calls_by_token[key]
+
     def prune_entries_older_than(self, *, now: datetime, age: timedelta) -> list[str]:
         removed: list[str] = []
         for hist_id, entry in tuple(self._entries.items()):
             if (now - entry.last_access) >= age:
-                self._entries.pop(hist_id, None)
+                self._remove_entry(hist_id)
                 removed.append(hist_id)
         return removed
 
@@ -558,7 +572,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                     codec=self._request_dense_view_codec(request),
                 )
                 if request.delete_from_server:
-                    self._entries.pop(hist_id, None)
+                    self._remove_entry(hist_id)
                 logger.debug(
                     fmt_rpc_logger_msg(
                         rpc_method=RPC_SNAPSHOT,
@@ -605,7 +619,7 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 hist_id=hist_id,
                 request_token=request_token,
             )
-            self._entries.pop(hist_id, None)
+            self._remove_entry(hist_id)
             logger.debug(
                 fmt_rpc_logger_msg(
                     rpc_method=RPC_DELETE,
@@ -675,9 +689,20 @@ class Histogrammer(hist_pb2_grpc.HistogrammerServiceServicer):
                 hist_id=hist_id,
                 request_token=request_token,
             )
-            with h5py.File(destination, "w") as h5_file:
-                uhi.io.hdf5.write(h5_file.create_group(hist_id), entry.hist.to_hist())
-            self._entries.pop(hist_id, None)
+            # Capture an atomic copy on the event loop (same pattern as
+            # Snapshot), then materialize and write the file in a worker
+            # thread so the blocking I/O does not stall other RPCs. The
+            # entry is removed only after the write succeeds.
+            snapshot = entry.hist.copy()
+
+            def _write_hdf5() -> None:
+                with h5py.File(destination, "w") as h5_file:
+                    uhi.io.hdf5.write(
+                        h5_file.create_group(hist_id), snapshot.to_hist()
+                    )
+
+            await asyncio.to_thread(_write_hdf5)
+            self._remove_entry(hist_id)
             logger.debug(
                 fmt_rpc_logger_msg(
                     rpc_method=RPC_FLUSH,
