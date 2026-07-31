@@ -105,6 +105,9 @@ exclude = [
     "src/histserv/dashboard/ui/.*",
     "src/histserv/dashboard/ui/README.md",
 ]
+# dist/ is gitignored but must travel in the wheel, otherwise
+# histserv[dashboard] installs serve a UI-less dashboard.
+force-include = {"src/histserv/dashboard/ui/dist" = "histserv/dashboard/ui/dist"}
 
 [tool.hatch.build.hooks.custom]
 path = "hatch_build.py"
