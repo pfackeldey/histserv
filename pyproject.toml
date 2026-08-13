@@ -78,6 +78,9 @@ dev = [
 [project.scripts]
 histserv = "histserv.__main__:run"
 
+[tool.uv]
+exclude-newer = "7 days"
+
 [tool.hatch]
 version.path = "src/histserv/__init__.py"
 
