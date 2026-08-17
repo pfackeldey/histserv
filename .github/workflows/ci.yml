@@ -6,8 +6,7 @@ on:
     branches:
       - main
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,22 +14,27 @@ concurrency:
 
 jobs:
   test:
+    name: Test (${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read  # to check out the repository
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.14"]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
 
       # Pre-build the dashboard UI so hatch_build.py finds dist/ during packaging.
       # uv/hatchling don't know about bun, so we must do this before the Python build.
-      - uses: prefix-dev/setup-pixi@v0
+      - uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
         with:
           pixi-version: latest
           environments: dashboard
@@ -39,7 +43,7 @@ jobs:
       - name: Bundle dashboard UI
         run: pixi run dashboard-bundle
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
 
       - name: Install dependencies
         run: uv sync --dev
@@ -50,19 +54,25 @@ jobs:
   frontend:
     name: Frontend (${{ matrix.check }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read  # to check out the repository
     strategy:
       fail-fast: false
       matrix:
         check: [test, lint, check, build]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: prefix-dev/setup-pixi@v0
+      - uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
         with:
           pixi-version: latest
           environments: dashboard
           cache: true
 
       - name: Run ${{ matrix.check }}
-        run: pixi run dashboard-${{ matrix.check }}
+        run: pixi run dashboard-$CHECK
+        env:
+          CHECK: ${{ matrix.check }}
